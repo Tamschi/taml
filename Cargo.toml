@@ -1,0 +1,8 @@
+[package]
+name = "taml"
+version = "0.0.0"
+authors = ["Tamme Schichler <tamme@schichler.dev>"]
+edition = "2018"
+
+[dependencies]
+serde = "1.0.114"
