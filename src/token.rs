@@ -1,9 +1,12 @@
-use logos::Logos;
+use {
+    logos::Logos,
+    std::fmt::{Display, Formatter, Result as fmtResult},
+};
 
-#[derive(Logos, Debug, PartialEq)]
-pub enum Token {
-    #[regex(r"//[^\n]+")]
-    Comment,
+#[derive(Logos, Debug, Clone, Copy, PartialEq)]
+pub enum Token<'a> {
+    #[regex(r"//[^\n]+", |lex| &lex.slice()[2..])]
+    Comment(&'a str),
 
     #[token("#")]
     HeadingHash,
@@ -33,23 +36,47 @@ pub enum Token {
     Period,
 
     #[regex(r#""([^\\"]|\\\\|\\")*""#)]
-    String,
+    String(&'a str),
 
     #[regex(r"-?\d+\.\d+")]
-    Float,
+    Float(&'a str),
 
     #[regex(r"-?\d+")]
-    Integer,
+    Integer(&'a str),
 
     #[token(":")]
     Colon,
 
     #[regex(r"[a-zA-Z_][a-zA-Z\-_\d]*")]
-    Identifier,
+    Identifier(&'a str),
 
     #[error]
     #[regex(r"[ \r\t]+", logos::skip)]
     Error,
+}
+
+impl<'a> Display for Token<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmtResult {
+        match self {
+            Token::Comment(str) => write!(f, "//{}", str),
+            Token::HeadingHash => write!(f, "#"),
+            Token::Newline => writeln!(f),
+            Token::Brac => write!(f, "["),
+            Token::Ket => write!(f, "]"),
+            Token::Bra => write!(f, "{{"),
+            Token::Ce => write!(f, "}}"),
+            Token::Paren => write!(f, "("),
+            Token::Thesis => write!(f, ")"),
+            Token::Comma => write!(f, ","),
+            Token::Period => write!(f, "."),
+            Token::String(str) => write!(f, r#""{}""#, str),
+            Token::Float(str) => write!(f, "{}", str),
+            Token::Integer(str) => write!(f, "{}", str),
+            Token::Colon => write!(f, ":"),
+            Token::Identifier(str) => write!(f, "{}", str),
+            Token::Error => panic!(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -78,70 +105,70 @@ fn lex() {
         tokens.as_slice(),
         &[
             // Comment
-            Comment,
+            Comment(""),
             Newline,
             // Heading
             HeadingHash,
             Brac,
             Brac,
-            Identifier,
+            Identifier(""),
             Ket,
             Period,
             Bra,
-            Identifier,
+            Identifier(""),
             Comma,
-            Identifier,
+            Identifier(""),
             Ce,
             Ket,
             Newline,
             // Table
-            String,
+            String(""),
             Comma,
-            Float,
+            Float(""),
             Newline,
-            String,
+            String(""),
             Comma,
-            Float,
+            Float(""),
             Newline,
-            String,
+            String(""),
             Comma,
-            Float,
+            Float(""),
             Newline,
             // Empty line
             Newline,
             // Heading
             HeadingHash,
             Brac,
-            Identifier,
+            Identifier(""),
             Ket,
             Newline,
             // Various key value pairs
-            Identifier,
+            Identifier(""),
             Colon,
-            String,
+            String(""),
             Newline,
-            Identifier,
+            Identifier(""),
             Colon,
-            Integer,
+            Integer(""),
             Newline,
-            Identifier,
+            Identifier(""),
             Colon,
-            Identifier,
+            Identifier(""),
             Newline,
-            Identifier,
+            Identifier(""),
             Colon,
             Paren,
-            Integer,
+            Integer(""),
             Comma,
-            Integer,
+            Integer(""),
             Thesis,
             Newline,
-            Identifier,
+            Identifier(""),
             Colon,
             Paren,
-            Float,
+            Float(""),
             Comma,
-            Float,
+            Float(""),
             Thesis,
             Newline
         ][..]

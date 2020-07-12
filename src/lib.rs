@@ -1,8 +1,11 @@
+#![allow(unused_variables)] //TODO
+#![allow(dead_code)] //TODO
+
 use {serde::de, std::fmt::Display};
 
 //mod deserializer;
 mod parser;
-mod token;
+pub mod token;
 
 type Result<'a, T> = std::result::Result<T, Error<'a>>;
 

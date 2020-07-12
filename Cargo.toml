@@ -4,6 +4,18 @@ version = "0.0.0"
 authors = ["Tamme Schichler <tamme@schichler.dev>"]
 edition = "2018"
 
+[lib]
+
+[[bin]]
+name = "taml"
+doc = false
+required-features = ["bin-dependencies"]
+
 [dependencies]
 logos = "0.11.4"
 serde = "1.0.114"
+argh = { version = "0.1.3", optional = true }
+
+[features]
+bin-dependencies = ["argh"]
+default = ["bin-dependencies"]
