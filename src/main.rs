@@ -82,7 +82,7 @@ fn main() {
                     assert_ne!(
                         token,
                         Token::Error,
-                        "Error in {} at {:?}: {} found.",
+                        "Error in {} at {:?}: found {}",
                         path.as_ref().display(),
                         span,
                         &text[span.clone()]
@@ -102,22 +102,30 @@ fn main() {
 
                 let mut newline_count = usize::MAX;
                 let mut hashed = false;
+                let mut identified = false;
 
                 for token in tokens {
                     match &token {
-                        Token::Newline if newline_count >= 2 => (),
+                        Token::Newline if newline_count >= 2 => Ok(()),
                         Token::Newline | Token::HeadingHash => {
-                            write!(&mut file, "{}", token).unwrap()
+                            newline_count += 1;
+                            write!(&mut file, "{}", token)
                         }
-                        _ if hashed => write!(&mut file, " {}", token).unwrap(),
-                        _ => write!(&mut file, "{}", token).unwrap(),
+                        _ if hashed => write!(&mut file, " {}", token),
+                        Token::Identifier(_) if identified => write!(&mut file, " {}", token),
+                        Token::Comma | Token::Colon => write!(&mut file, "{} ", token),
+                        _ => write!(&mut file, "{}", token),
                     }
+                    .unwrap();
 
                     hashed = token == Token::HeadingHash;
+                    identified = matches!(token, Token::Identifier(_));
                     if token != Token::Newline {
                         newline_count = 0
                     }
                 }
+
+                write!(&mut file, "{}", Token::Newline).unwrap();
             }
         }
     }

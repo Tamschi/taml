@@ -1,9 +1,31 @@
 use {
     logos::Logos,
+    smartstring::alias::String,
     std::fmt::{Display, Formatter, Result as fmtResult},
 };
 
-#[derive(Logos, Debug, Clone, Copy, PartialEq)]
+mod quoting;
+
+use quoting::Woc;
+
+fn trim_leading_0(mut s: &str) -> &str {
+    while s.len() >= 2 && s.as_bytes()[0] == b'0' && (b'0'..=b'9').contains(&s.as_bytes()[1]) {
+        s = &s[1..]
+    }
+    s
+}
+
+fn trim_trailing_0(mut s: &str) -> &str {
+    while s.len() >= 2
+        && s.as_bytes()[s.len() - 1] == b'0'
+        && (b'0'..=b'9').contains(&s.as_bytes()[s.len() - 2])
+    {
+        s = &s[..s.len() - 1]
+    }
+    s
+}
+
+#[derive(Logos, Debug, Clone, PartialEq)]
 pub enum Token<'a> {
     #[regex(r"//[^\n]+", |lex| &lex.slice()[2..])]
     Comment(&'a str),
@@ -35,20 +57,21 @@ pub enum Token<'a> {
     #[token(".")]
     Period,
 
-    #[regex(r#""([^\\"]|\\\\|\\")*""#)]
-    String(&'a str),
+    #[regex(r#""([^\\"]|\\\\|\\")*""#, |lex| quoting::unescape_string_contents(&lex.slice()[1..lex.slice().len() - 1]))]
+    String(Woc<'a, String, str>),
 
-    #[regex(r"-?\d+\.\d+")]
+    #[regex(r"-?\d+\.\d+", |lex| trim_trailing_0(trim_leading_0(lex.slice())))]
     Float(&'a str),
 
-    #[regex(r"-?\d+")]
+    #[regex(r"-?\d+", |lex| trim_leading_0(lex.slice()))]
     Integer(&'a str),
 
     #[token(":")]
     Colon,
 
-    #[regex(r"[a-zA-Z_][a-zA-Z\-_\d]*")]
-    Identifier(&'a str),
+    #[regex(r"[a-zA-Z_][a-zA-Z\-_0-9]*", |lex| Woc::Borrowed(lex.slice()))]
+    #[regex(r"`([^\\`]|\\\\|\\`)*`", |lex| quoting::unescape_quoted_identifier(lex.slice()))]
+    Identifier(Woc<'a, String, str>),
 
     #[error]
     #[regex(r"[ \r\t]+", logos::skip)]
@@ -69,11 +92,11 @@ impl<'a> Display for Token<'a> {
             Token::Thesis => write!(f, ")"),
             Token::Comma => write!(f, ","),
             Token::Period => write!(f, "."),
-            Token::String(str) => write!(f, r#""{}""#, str),
+            Token::String(str) => write!(f, r#""{}""#, quoting::escape_string_contents(str)),
             Token::Float(str) => write!(f, "{}", str),
             Token::Integer(str) => write!(f, "{}", str),
             Token::Colon => write!(f, ":"),
-            Token::Identifier(str) => write!(f, "{}", str),
+            Token::Identifier(str) => write!(f, "{}", quoting::escape_identifier(str)),
             Token::Error => panic!(),
         }
     }
@@ -84,15 +107,15 @@ impl<'a> Display for Token<'a> {
 fn lex() {
     let source = r#"//This is a comment
     # [[loops].{sound, volume}]
-    "$sewer/amb_drips", 0.8
-    "$sewer/amb_flies", 0.1
-    "$sewer/amb_hum", 0.05
+    "$sewer/amb_drips", 0000.8
+    "$sewer/amb_flies", 0.1000
+    "$sewer/amb_hum", 000.0500
     
     # [moments]
     sound: "$sewer/moments/*"
     layers: 1
     first-interval-no-min: true
-    interval-range: (10, 60)
+    interval-range: (10, 0060)
     volume-range: (0.1, 0.15)
     "#;
 
@@ -104,71 +127,65 @@ fn lex() {
     assert_eq!(
         tokens.as_slice(),
         &[
-            // Comment
-            Comment(""),
+            Comment("This is a comment"),
             Newline,
-            // Heading
             HeadingHash,
             Brac,
             Brac,
-            Identifier(""),
+            Identifier(Woc::Borrowed("loops")),
             Ket,
             Period,
             Bra,
-            Identifier(""),
+            Identifier(Woc::Borrowed("sound")),
             Comma,
-            Identifier(""),
+            Identifier(Woc::Borrowed("volume")),
             Ce,
             Ket,
             Newline,
-            // Table
-            String(""),
+            String(Woc::Borrowed("$sewer/amb_drips")),
             Comma,
-            Float(""),
+            Float("0.8"),
             Newline,
-            String(""),
+            String(Woc::Borrowed("$sewer/amb_flies")),
             Comma,
-            Float(""),
+            Float("0.1"),
             Newline,
-            String(""),
+            String(Woc::Borrowed("$sewer/amb_hum")),
             Comma,
-            Float(""),
+            Float("0.05"),
             Newline,
-            // Empty line
             Newline,
-            // Heading
             HeadingHash,
             Brac,
-            Identifier(""),
+            Identifier(Woc::Borrowed("moments")),
             Ket,
             Newline,
-            // Various key value pairs
-            Identifier(""),
+            Identifier(Woc::Borrowed("sound")),
             Colon,
-            String(""),
+            String(Woc::Borrowed("$sewer/moments/*")),
             Newline,
-            Identifier(""),
+            Identifier(Woc::Borrowed("layers")),
             Colon,
-            Integer(""),
+            Integer("1"),
             Newline,
-            Identifier(""),
+            Identifier(Woc::Borrowed("first-interval-no-min")),
             Colon,
-            Identifier(""),
+            Identifier(Woc::Borrowed("true")),
             Newline,
-            Identifier(""),
+            Identifier(Woc::Borrowed("interval-range")),
             Colon,
             Paren,
-            Integer(""),
+            Integer("10"),
             Comma,
-            Integer(""),
+            Integer("60"),
             Thesis,
             Newline,
-            Identifier(""),
+            Identifier(Woc::Borrowed("volume-range")),
             Colon,
             Paren,
-            Float(""),
+            Float("0.1"),
             Comma,
-            Float(""),
+            Float("0.15"),
             Thesis,
             Newline
         ][..]

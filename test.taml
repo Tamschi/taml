@@ -1,0 +1,13 @@
+//This is a comment
+# [[loops].{sound, volume}]
+"$sewer/amb_drips", 0.8
+"$sewer/amb_flies", 0.1
+"$sewer/amb_hum", 0.05
+
+# [moments]
+sound: "$sewer/moments/*"
+layers: 1
+first-interval-no-min: true
+interval-range: (10, 60)
+volume-range: (0.1, 0.15)
+`spaced \` identifier`: "asdhasd kjhdajkh"

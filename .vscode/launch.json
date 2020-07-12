@@ -1,0 +1,83 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'taml'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=taml"
+                ],
+                "filter": {
+                    "name": "taml",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug 'taml'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=taml",
+                    "--package=taml"
+                ],
+                "filter": {
+                    "name": "taml",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug 'taml fmt'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=taml",
+                    "--package=taml"
+                ],
+                "filter": {
+                    "name": "taml",
+                    "kind": "bin"
+                }
+            },
+            "args": ["fmt"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'taml'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=taml",
+                    "--package=taml"
+                ],
+                "filter": {
+                    "name": "taml",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
