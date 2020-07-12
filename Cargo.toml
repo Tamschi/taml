@@ -5,4 +5,5 @@ authors = ["Tamme Schichler <tamme@schichler.dev>"]
 edition = "2018"
 
 [dependencies]
+logos = "0.11.4"
 serde = "1.0.114"
