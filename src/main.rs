@@ -35,6 +35,7 @@ struct Fmt {
     path: Option<PathBuf>,
 }
 
+//TODO: Atomic file replacements.
 fn main() {
     let arghs: Arghs = argh::from_env();
 
@@ -107,10 +108,11 @@ fn main() {
                 for token in tokens {
                     match &token {
                         Token::Newline if newline_count >= 2 => Ok(()),
-                        Token::Newline | Token::HeadingHash => {
+                        Token::Newline => {
                             newline_count += 1;
                             write!(&mut file, "{}", token)
                         }
+                        Token::HeadingHash => write!(&mut file, "{}", token),
                         _ if hashed => write!(&mut file, " {}", token),
                         Token::Identifier(_) if identified => write!(&mut file, " {}", token),
                         Token::Comma | Token::Colon => write!(&mut file, "{} ", token),

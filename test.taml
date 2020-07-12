@@ -1,10 +1,12 @@
-//This is a comment
-# [[loops].{sound, volume}]
+# [soundscapes]
+// Sewer
+
+## [[loops].{sound, volume}]
 "$sewer/amb_drips", 0.8
 "$sewer/amb_flies", 0.1
 "$sewer/amb_hum", 0.05
 
-# [moments]
+## [moments]
 sound: "$sewer/moments/*"
 layers: 1
 first-interval-no-min: true
