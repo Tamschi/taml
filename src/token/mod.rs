@@ -8,14 +8,14 @@ mod quoting;
 
 use quoting::Woc;
 
-fn trim_leading_0(mut s: &str) -> &str {
+fn trim_leading_0s(mut s: &str) -> &str {
     while s.len() >= 2 && s.as_bytes()[0] == b'0' && (b'0'..=b'9').contains(&s.as_bytes()[1]) {
         s = &s[1..]
     }
     s
 }
 
-fn trim_trailing_0(mut s: &str) -> &str {
+fn trim_trailing_0s(mut s: &str) -> &str {
     while s.len() >= 2
         && s.as_bytes()[s.len() - 1] == b'0'
         && (b'0'..=b'9').contains(&s.as_bytes()[s.len() - 2])
@@ -60,10 +60,10 @@ pub enum Token<'a> {
     #[regex(r#""([^\\"]|\\\\|\\")*""#, |lex| quoting::unescape_string_contents(&lex.slice()[1..lex.slice().len() - 1]))]
     String(Woc<'a, String, str>),
 
-    #[regex(r"-?\d+\.\d+", |lex| trim_trailing_0(trim_leading_0(lex.slice())))]
+    #[regex(r"-?\d+\.\d+", |lex| trim_trailing_0s(trim_leading_0s(lex.slice())))]
     Float(&'a str),
 
-    #[regex(r"-?\d+", |lex| trim_leading_0(lex.slice()))]
+    #[regex(r"-?\d+", |lex| trim_leading_0s(lex.slice()))]
     Integer(&'a str),
 
     #[token(":")]
