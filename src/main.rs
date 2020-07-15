@@ -1,4 +1,6 @@
+#![warn(clippy::pedantic)]
 #![allow(unused_variables)] //TODO
+#![allow(clippy::default_trait_access)] // because of derive(FromArgs).
 
 use {
     argh::FromArgs,
@@ -9,7 +11,10 @@ use {
         io::Write as _,
         path::{Path, PathBuf},
     },
-    taml::token::Token,
+    taml::{
+        formatting::{CanonicalFormatScanner, Recommendation},
+        token::Token,
+    },
 };
 
 #[derive(Debug, FromArgs)]
@@ -39,6 +44,7 @@ struct Fmt {
 fn main() {
     let arghs: Arghs = argh::from_env();
 
+    #[allow(clippy::items_after_statements)]
     match arghs.subcommand {
         SubCommand::Fmt(Fmt { path }) => {
             let path = path.unwrap_or_else(|| ".".into());
@@ -101,33 +107,23 @@ fn main() {
                     .open(path)
                     .unwrap();
 
-                let mut newline_count = usize::MAX;
-                let mut hashed = false;
-                let mut identified = false;
-
+                let mut format_scanner = CanonicalFormatScanner::new();
                 for token in tokens {
-                    match &token {
-                        Token::Newline if newline_count >= 2 => Ok(()),
-                        Token::Newline => {
-                            newline_count += 1;
+                    match format_scanner.next(&token) {
+                        Recommendation::Recommended | Recommendation::Required => {
                             write!(&mut file, "{}", token)
                         }
-                        Token::HeadingHash => write!(&mut file, "{}", token),
-                        _ if hashed => write!(&mut file, " {}", token),
-                        Token::Identifier(_) if identified => write!(&mut file, " {}", token),
-                        Token::Comma | Token::Colon => write!(&mut file, "{} ", token),
-                        _ => write!(&mut file, "{}", token),
+                        Recommendation::PrependSpace | Recommendation::PrependSpaceRequired => {
+                            write!(&mut file, " {}", token)
+                        }
+                        Recommendation::PrependNewline => write!(&mut file, "\n{}", token),
+                        Recommendation::PrependTwoNewlines => write!(&mut file, "\n\n{}", token),
+                        Recommendation::SkipToken => Ok(()),
                     }
-                    .unwrap();
-
-                    hashed = token == Token::HeadingHash;
-                    identified = matches!(token, Token::Identifier(_));
-                    if token != Token::Newline {
-                        newline_count = 0
-                    }
+                    .unwrap()
                 }
 
-                write!(&mut file, "{}", Token::Newline).unwrap();
+                writeln!(&mut file).unwrap();
             }
         }
     }

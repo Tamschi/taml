@@ -1,8 +1,10 @@
+#![warn(clippy::pedantic)]
 #![allow(unused_variables)] //TODO
 #![allow(dead_code)] //TODO
 
 use {serde::de, std::fmt::Display};
 
+pub mod formatting;
 //mod deserializer;
 mod parser;
 pub mod token;

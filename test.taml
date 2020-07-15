@@ -4,7 +4,7 @@
 ## [[loops].{sound, volume}]
 "$sewer/amb_drips", 0.8
 "$sewer/amb_flies", 0.1
-"$sewer/amb_hum", 0.05
+"$sewer/amb_hum", 0.05 // postfix comment
 
 ## [moments]
 sound: "$sewer/moments/*"

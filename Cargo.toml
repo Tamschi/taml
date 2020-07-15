@@ -1,6 +1,6 @@
 [package]
 name = "taml"
-version = "0.0.0"
+version = "0.0.0-dev"
 authors = ["Tamme Schichler <tamme@schichler.dev>"]
 edition = "2018"
 publish = false
@@ -17,6 +17,9 @@ argh = { version = "0.1.3", optional = true }
 logos = "0.11.4"
 serde = "1.0.114"
 smartstring = "0.2.3"
+woc = { path = "../woc" }
+lazy-transform-str = { path = "../lazy-transform-str" }
+gnaw = { path = "../gnaw" }
 
 [features]
 bin-dependencies = ["argh"]
