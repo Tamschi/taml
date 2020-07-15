@@ -1,0 +1,16 @@
+[submodule "taml"]
+	path = taml
+	url = https://github.com/Tamschi/taml.git
+
+[submodule "woc"]
+	path = woc
+	url = https://github.com/Tamschi/woc.git
+[submodule "switcheroo"]
+	path = switcheroo
+	url = https://github.com/Tamschi/switcheroo.git
+[submodule "lazy-transform-str"]
+	path = lazy-transform-str
+	url = https://github.com/Tamschi/lazy-transform-str.git
+[submodule "gnaw"]
+	path = gnaw
+	url = https://github.com/Tamschi/gnaw.git
