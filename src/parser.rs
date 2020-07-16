@@ -2,7 +2,7 @@ use {
     crate::token::Token,
     smartstring::alias::String,
     std::{
-        collections::{hash_map, HashMap},
+        collections::HashMap,
         iter::{FromIterator, Peekable},
     },
     woc::Woc,
@@ -50,65 +50,47 @@ impl<'a> FromIterator<Token<'a>> for Result<HashMap<Woc<'a, String, str>, Taml<'
         let mut iter = iter.into_iter().peekable();
 
         let mut taml = HashMap::new();
-        let mut current_path = vec![];
 
-        while let Some(next) = iter.peek() {
-            match next {
-                Token::Comment(_) => assert!(matches!(iter.next().unwrap(), Token::Comment(_))),
-                Token::Newline => assert_eq!(iter.next().unwrap(), Token::Newline),
-                Token::HeadingHash => break,
-                _ => {
-                    let kv = parse_key_value_pair(&mut iter)?.ok_or(Expected::Unspecific)?;
-                    match taml.entry(kv.0) {
-                        hash_map::Entry::Occupied(_) => return Err(Expected::Unspecific),
-                        hash_map::Entry::Vacant(vacant) => {
-                            vacant.insert(kv.1);
-                        }
-                    }
-                }
-            }
-        }
-
-        while let Some(next) = iter.peek() {
-            match next {
-                Token::Comment(_) => assert!(matches!(iter.next().unwrap(), Token::Comment(_))),
-                Token::Newline => assert_eq!(iter.next().unwrap(), Token::Newline),
-                _ => {
-                    let selection = parse_heading(&mut iter, &mut current_path, &mut taml)?
-                        .ok_or(Expected::Unspecific)?;
-                    todo!();
-                }
-            }
-        }
+        parse_section(&mut iter, &mut Selection::Map(&mut taml), 0);
 
         Ok(taml)
     }
 }
 
-fn parse_heading<'a>(
-    iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
-    current_path: &mut Vec<PathSegment<'a>>,
-    taml: &'a mut HashMap<Woc<'a, String, str>, Taml<'a>>,
-) -> Result<Option<Selection<'a>>, Expected> {
-    if iter.peek() != Some(&Token::HeadingHash) {
-        return Ok(None);
-    }
+fn parse_section<'a, 'b>(
+    iter: &mut Peekable<impl Iterator<Item = Token<'b>>>,
+    selection: &'a mut Selection<'a, 'b>,
+    depth: usize,
+) -> Result<(), Expected> {
+    while let Some(next) = iter.peek() {
+        match next {
+            Token::Comment(_) => assert!(matches!(iter.next().unwrap(), Token::Comment(_))),
+            Token::Newline => assert_eq!(iter.next().unwrap(), Token::Newline),
+            Token::HeadingHashes(count) if *count == depth + 1 => {
+                let mut selection = parse_heading(iter, selection, depth)?.unwrap();
 
-    let mut hash_count = 0;
-    while iter.peek() == Some(&Token::HeadingHash) {
-        assert_eq!(iter.next().unwrap(), Token::HeadingHash);
-        hash_count += 1;
-    }
-
-    current_path.truncate(hash_count - 1);
-    if current_path.len() < hash_count - 1 {
-        return Err(Expected::Unspecific);
-    }
-    if let Some(last_segment) = current_path.last() {
-        if last_segment.tabular.is_some() {
-            // Can't nest further in tabular sections.
-            return Err(Expected::Unspecific);
+                parse_section(iter, &mut selection, depth + 1)?
+            }
+            Token::HeadingHashes(count) if *count <= depth => return Ok(()),
+            Token::HeadingHashes(_) => return Err(Expected::Unspecific),
+            _ => todo!(),
         }
+    }
+
+    Ok(())
+}
+
+//TODO: Fix lifetimes.
+fn parse_heading<'a, 'b, 'c>(
+    iter: &mut Peekable<impl Iterator<Item = Token<'b>>>,
+    selection: &'c mut Selection<'a, 'b>,
+    depth: usize,
+) -> Result<Option<Selection<'c, 'b>>, Expected> {
+    match iter.peek() {
+        Some(&Token::HeadingHashes(count)) if count == depth + 1 => {
+            assert_eq!(iter.next().unwrap(), Token::HeadingHashes(count))
+        }
+        _ => return Ok(None),
     }
 
     let mut base = vec![];
@@ -150,16 +132,18 @@ fn parse_heading<'a>(
         }
     }
 
-    let selected = Selection::Map(taml)
-        .get_last_mut(&*current_path)
-        .unwrap() // Instantiated correctly by previous headings.
-        .unwrap()
-        .instantiate(&base)
+    let selection = selection
+        .instantiate(base.iter().map(|s| match s {
+            BasicPathElement::Plain(str) => {
+                BasicPathElement::Plain(Woc::Owned(str.clone().into_owned()))
+            }
+            BasicPathElement::List(str) => {
+                BasicPathElement::List(Woc::Owned(str.to_owned().clone().into_owned()))
+            }
+        }))
         .map_err(|()| Expected::Unspecific)?;
 
-    current_path.push(PathSegment { base, tabular });
-
-    Ok(Some(selected))
+    Ok(Some(selection))
 }
 
 fn parse_tabular_path_segments<'a>(
@@ -228,17 +212,17 @@ fn parse_tabular_path_segment<'a>(
     Ok(TabularPathSegment { base, multi })
 }
 
-enum Selection<'a> {
-    Map(&'a mut HashMap<Woc<'a, String, str>, Taml<'a>>),
-    List(&'a mut Vec<Taml<'a>>),
+enum Selection<'a, 'b> {
+    Map(&'a mut HashMap<Woc<'b, String, str>, Taml<'b>>),
+    List(&'a mut Vec<Taml<'b>>),
 }
 
-impl<'a> Selection<'a> {
-    fn get_last_mut<'b>(
+impl<'a, 'b> Selection<'a, 'b> {
+    fn get_last_mut<'c>(
         self,
-        path: impl IntoIterator<Item = &'b PathSegment<'b>>,
-    ) -> Result<Option<Selection<'a>>, ()> {
-        let mut selected = self;
+        path: impl IntoIterator<Item = &'c PathSegment<'c>>,
+    ) -> Result<Option<Selection<'a, 'b>>, ()> {
+        let mut selected: Selection<'a, 'b> = self;
         for segment in path.into_iter() {
             match segment {
                 PathSegment {
@@ -277,14 +261,18 @@ impl<'a> Selection<'a> {
         Ok(Some(selected))
     }
 
-    fn instantiate<'b>(
-        self,
-        path: impl IntoIterator<Item = &'b BasicPathElement<'a>>,
-    ) -> Result<Selection<'a>, ()>
+    fn instantiate<'c>(
+        &'a mut self,
+        path: impl IntoIterator<Item = BasicPathElement<'b>>,
+    ) -> Result<Selection<'c, 'b>, ()>
     where
-        'a: 'b,
+        'a: 'c,
     {
-        let mut selection = self;
+        let mut selection = match self {
+            Selection::Map(map) => Selection::Map(map),
+            Selection::List(list) => Selection::List(list),
+        };
+
         for path_element in path {
             let map = match selection {
                 Selection::Map(map) => map,
@@ -319,7 +307,7 @@ fn parse_key_value_pair<'a>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
 ) -> Result<Option<(Woc<'a, String, str>, Taml<'a>)>, Expected> {
     Ok(match iter.peek().ok_or(Expected::Unspecific)? {
-        Token::HeadingHash
+        Token::HeadingHashes(_)
         | Token::Paren
         | Token::String(_)
         | Token::Float(_)
@@ -363,7 +351,7 @@ fn parse_value<'a>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
 ) -> Result<Option<Taml<'a>>, Expected> {
     Ok(match iter.peek().ok_or(Expected::Unspecific)? {
-        Token::HeadingHash | Token::Identifier(_) => None,
+        Token::HeadingHashes(_) | Token::Identifier(_) => None,
 
         Token::Paren | Token::String(_) | Token::Float(_) | Token::Integer(_) => {
             Some(match iter.next().unwrap() {

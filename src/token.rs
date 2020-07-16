@@ -5,7 +5,10 @@ use {
     },
     logos::Logos,
     smartstring::alias::String,
-    std::fmt::{Display, Formatter, Result as fmtResult},
+    std::{
+        fmt::{Display, Formatter, Result as fmtResult},
+        iter,
+    },
     woc::Woc,
 };
 
@@ -84,8 +87,8 @@ pub enum Token<'a> {
     #[regex(r"//[^\r\n]+", |lex| lex.slice()[2..].trim_end_matches([' ', '\t'].as_ref()))]
     Comment(&'a str),
 
-    #[token("#")]
-    HeadingHash,
+    #[regex("#+", |lex| lex.slice().chars().count())]
+    HeadingHashes(usize),
 
     #[token("\n")]
     Newline,
@@ -136,7 +139,9 @@ impl<'a> Display for Token<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmtResult {
         match self {
             Token::Comment(str) => write!(f, "//{}", str),
-            Token::HeadingHash => write!(f, "#"),
+            Token::HeadingHashes(count) => {
+                write!(f, "{}", iter::repeat('#').take(*count).collect::<String>())
+            }
             Token::Newline => writeln!(f),
             Token::Brac => write!(f, "["),
             Token::Ket => write!(f, "]"),
@@ -184,7 +189,7 @@ fn lex() {
         &[
             Comment("This is a comment"),
             Newline,
-            HeadingHash,
+            HeadingHashes(1),
             Brac,
             Brac,
             Identifier(Woc::Borrowed("loops")),
@@ -210,7 +215,7 @@ fn lex() {
             Float("0.05"),
             Newline,
             Newline,
-            HeadingHash,
+            HeadingHashes(1),
             Brac,
             Identifier(Woc::Borrowed("moments")),
             Ket,

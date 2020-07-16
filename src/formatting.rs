@@ -59,10 +59,9 @@ impl CanonicalFormatScanner {
             (State::SingleNewline, Token::Newline) => Recommendation::Recommended,
             (_, Token::Newline) => Recommendation::Required,
 
-            (State::Hashed, Token::HeadingHash)
-            | (State::MultiNewlineOrInitial, Token::HeadingHash) => Recommendation::Required,
-            (State::SingleNewline, Token::HeadingHash) => Recommendation::PrependNewline,
-            (_, Token::HeadingHash) => Recommendation::PrependTwoNewlines,
+            (State::MultiNewlineOrInitial, Token::HeadingHashes(_)) => Recommendation::Required,
+            (State::SingleNewline, Token::HeadingHashes(_)) => Recommendation::PrependNewline,
+            (_, Token::HeadingHashes(_)) => Recommendation::PrependTwoNewlines,
             (State::Hashed, _) => Recommendation::PrependSpace,
 
             (State::Identifier, Token::Identifier(_)) => Recommendation::PrependSpaceRequired,
@@ -81,7 +80,7 @@ impl CanonicalFormatScanner {
         };
 
         self.state = match token {
-            Token::HeadingHash => State::Hashed,
+            Token::HeadingHashes(_) => State::Hashed,
             Token::Newline
                 if self.state == State::MultiNewlineOrInitial
                     || self.state == State::SingleNewline =>
