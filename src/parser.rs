@@ -51,7 +51,7 @@ impl<'a> FromIterator<Token<'a>> for Result<HashMap<Woc<'a, String, str>, Taml<'
 
         let mut taml = HashMap::new();
 
-        parse_section(&mut iter, &mut Selection::Map(&mut taml), 0);
+        parse_section(&mut iter, &mut Selection::Map(&mut taml), 0)?;
 
         Ok(taml)
     }
@@ -73,7 +73,7 @@ fn parse_section<'a, 'b>(
             }
             Token::HeadingHashes(count) if *count <= depth => return Ok(()),
             Token::HeadingHashes(_) => return Err(Expected::Unspecific),
-            _ => todo!(),
+            _ => todo!("Parse lines"),
         }
     }
 
@@ -132,18 +132,20 @@ fn parse_heading<'a, 'b, 'c>(
         }
     }
 
-    let selection = selection
-        .instantiate(base.iter().map(|s| match s {
-            BasicPathElement::Plain(str) => {
-                BasicPathElement::Plain(Woc::Owned(str.clone().into_owned()))
-            }
-            BasicPathElement::List(str) => {
-                BasicPathElement::List(Woc::Owned(str.to_owned().clone().into_owned()))
-            }
-        }))
-        .map_err(|()| Expected::Unspecific)?;
+    //TODO: This is a REALLY ugly hack.
+    let selection =
+        unsafe { std::mem::transmute_copy::<Selection<'_, 'b>, Selection<'c, 'b>>(selection) }
+            .instantiate(base.iter().map(|s| match s {
+                BasicPathElement::Plain(str) => {
+                    BasicPathElement::Plain(Woc::Owned(str.clone().into_owned()))
+                }
+                BasicPathElement::List(str) => {
+                    BasicPathElement::List(Woc::Owned(str.to_owned().clone().into_owned()))
+                }
+            }))
+            .map_err(|()| Expected::Unspecific)?;
 
-    Ok(Some(selection))
+    Ok(Some(unsafe { std::mem::transmute(selection) }))
 }
 
 fn parse_tabular_path_segments<'a>(
@@ -262,7 +264,7 @@ impl<'a, 'b> Selection<'a, 'b> {
     }
 
     fn instantiate<'c>(
-        &'a mut self,
+        self,
         path: impl IntoIterator<Item = BasicPathElement<'b>>,
     ) -> Result<Selection<'c, 'b>, ()>
     where
