@@ -1,8 +1,10 @@
-use crate::token::Token;
-use std::iter::FromIterator;
 use {
+    crate::token::Token,
     smartstring::alias::String,
-    std::{collections::HashMap, iter::Peekable},
+    std::{
+        collections::{hash_map, HashMap},
+        iter::{FromIterator, Peekable},
+    },
     woc::Woc,
 };
 
@@ -43,17 +45,51 @@ impl<'a> TabularPathSegment<'a> {
     }
 }
 
-impl<'a> FromIterator<Token<'a>> for Result<Taml<'a>, ()> {
+impl<'a> FromIterator<Token<'a>> for Result<HashMap<Woc<'a, String, str>, Taml<'a>>, Expected> {
     fn from_iter<T: IntoIterator<Item = Token<'a>>>(iter: T) -> Self {
-        let iter = iter.into_iter().peekable();
+        let mut iter = iter.into_iter().peekable();
+
+        let mut taml = HashMap::new();
+        let mut current_path = vec![];
+
+        while let Some(next) = iter.peek() {
+            match next {
+                Token::Comment(_) => assert!(matches!(iter.next().unwrap(), Token::Comment(_))),
+                Token::Newline => assert_eq!(iter.next().unwrap(), Token::Newline),
+                Token::HeadingHash => break,
+                _ => {
+                    let kv = parse_key_value_pair(&mut iter)?.ok_or(Expected::Unspecific)?;
+                    match taml.entry(kv.0) {
+                        hash_map::Entry::Occupied(_) => return Err(Expected::Unspecific),
+                        hash_map::Entry::Vacant(vacant) => {
+                            vacant.insert(kv.1);
+                        }
+                    }
+                }
+            }
+        }
+
+        while let Some(next) = iter.peek() {
+            match next {
+                Token::Comment(_) => assert!(matches!(iter.next().unwrap(), Token::Comment(_))),
+                Token::Newline => assert_eq!(iter.next().unwrap(), Token::Newline),
+                _ => {
+                    let selection = parse_heading(&mut iter, &mut current_path, &mut taml)?
+                        .ok_or(Expected::Unspecific)?;
+                    todo!();
+                }
+            }
+        }
+
+        Ok(taml)
     }
 }
 
-fn parse_heading<'a, 'b: 'a, 'c: 'b>(
+fn parse_heading<'a>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
-    current_path: &mut Vec<PathSegment<'b>>,
-    taml: &mut Taml<'c>,
-) -> Result<Option<Selection<'c>>, Expected> {
+    current_path: &mut Vec<PathSegment<'a>>,
+    taml: &'a mut HashMap<Woc<'a, String, str>, Taml<'a>>,
+) -> Result<Option<Selection<'a>>, Expected> {
     if iter.peek() != Some(&Token::HeadingHash) {
         return Ok(None);
     }
@@ -75,7 +111,7 @@ fn parse_heading<'a, 'b: 'a, 'c: 'b>(
         }
     }
 
-    let base = vec![];
+    let mut base = vec![];
     let mut tabular = None;
     loop {
         match iter.peek() {
@@ -92,7 +128,7 @@ fn parse_heading<'a, 'b: 'a, 'c: 'b>(
                         _ => unreachable!(),
                     },
                     Token::Brac => {
-                        tabular = Some(parse_tabular_path_segments(iter)?);
+                        tabular = Some(parse_tabular_path_segment(iter)?);
                     }
                     _ => return Err(Expected::Unspecific),
                 }
@@ -114,15 +150,34 @@ fn parse_heading<'a, 'b: 'a, 'c: 'b>(
         }
     }
 
-    let segment = PathSegment { base, tabular };
-    let selected = taml
+    let selected = Selection::Map(taml)
         .get_last_mut(&*current_path)
         .unwrap() // Instantiated correctly by previous headings.
         .unwrap()
-        .instantiate(&segment)?;
-    current_path.push(segment);
+        .instantiate(&base)
+        .map_err(|()| Expected::Unspecific)?;
+
+    current_path.push(PathSegment { base, tabular });
 
     Ok(Some(selected))
+}
+
+fn parse_tabular_path_segments<'a>(
+    iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
+) -> Result<Vec<TabularPathSegment<'a>>, Expected> {
+    let mut segments = vec![];
+    while !matches!(
+        iter.peek().ok_or(Expected::Unspecific)?,
+        Token::Ce | Token::Ket
+    ) {
+        segments.push(parse_tabular_path_segment(iter)?);
+
+        match iter.peek() {
+            Some(Token::Comma) => assert_eq!(iter.next().unwrap(), Token::Comma),
+            _ => break,
+        }
+    }
+    Ok(segments)
 }
 
 fn parse_tabular_path_segment<'a>(
@@ -140,7 +195,25 @@ fn parse_tabular_path_segment<'a>(
                     _ => return Err(Expected::Unspecific),
                 }
             }
-            _ => todo!("Try parse basic path segement"),
+            Some(Token::Identifier(_)) => match iter.next().unwrap() {
+                Token::Identifier(str) => base.push(BasicPathElement::Plain(str)),
+                _ => unreachable!(),
+            },
+            Some(Token::Brac) => {
+                assert_eq!(iter.next().unwrap(), Token::Brac);
+                match iter.peek() {
+                    Some(Token::Identifier(_)) => match iter.next().unwrap() {
+                        Token::Identifier(str) => base.push(BasicPathElement::List(str)),
+                        _ => unreachable!(),
+                    },
+                    _ => return Err(Expected::Unspecific),
+                }
+                match iter.peek() {
+                    Some(Token::Ket) => assert_eq!(iter.next().unwrap(), Token::Ket),
+                    _ => return Err(Expected::Unspecific),
+                }
+            }
+            _ => return Err(Expected::Unspecific),
         }
 
         match iter.peek() {
@@ -160,59 +233,85 @@ enum Selection<'a> {
     List(&'a mut Vec<Taml<'a>>),
 }
 
-impl<'a> Taml<'a> {
-    fn get_last_mut<'b: 'a>(
-        &'a mut self,
+impl<'a> Selection<'a> {
+    fn get_last_mut<'b>(
+        self,
         path: impl IntoIterator<Item = &'b PathSegment<'b>>,
     ) -> Result<Option<Selection<'a>>, ()> {
-        let path = path.into_iter();
+        let mut selected = self;
+        for segment in path.into_iter() {
+            match segment {
+                PathSegment {
+                    tabular: Some(_), ..
+                } => return Err(()),
+                PathSegment {
+                    base,
+                    tabular: None,
+                } => {
+                    for path_element in base {
+                        let map = match selected {
+                            Selection::Map(map) => map,
+                            _ => return Err(()),
+                        };
+                        let value = match path_element {
+                            BasicPathElement::Plain(key) => map.get_mut(key.as_ref()),
 
-        match path.next() {
-            None => Ok(Some(match self {
-                Taml::Map(map) => Selection::Map(map),
-                Taml::List(list) => Selection::List(list),
-                _ => return Err(()),
-            })),
-            Some(PathSegment {
-                tabular: Some(_), ..
-            }) => Err(()),
-            Some(PathSegment {
-                base,
-                tabular: None,
-            }) => {
-                let mut selected = match self {
-                    Taml::Map(map) => Selection::Map(map),
-                    _ => return Err(()),
-                };
-                for path_element in base {
-                    selected = match path_element {
-                        BasicPathElement::Plain(key) => match selected {
-                            Selection::Map(selected) => match selected.get_mut(key) {
-                                Some(Taml::List(selected)) => Selection::List(&mut selected),
-                                Some(Taml::Map(selected)) => Selection::Map(&mut selected),
+                            BasicPathElement::List(key) => match map.get_mut(key.as_ref()) {
+                                Some(Taml::List(selected)) => selected.last_mut(),
                                 Some(_) => return Err(()),
                                 None => return Ok(None),
                             },
-                            _ => return Err(()),
-                        },
-                        BasicPathElement::List(key) => match selected {
-                            Selection::Map(selected) => match selected.get_mut(key) {
-                                Some(Taml::List(selected)) => match selected.last_mut() {
-                                    Some(Taml::Map(selected)) => Selection::Map(selected),
-                                    Some(Taml::List(selected)) => Selection::List(selected),
-                                    Some(_) => return Err(()),
-                                    None => return Ok(None),
-                                },
-                                Some(_) => return Err(()),
-                                None => return Ok(None),
-                            },
-                            _ => return Err(()),
-                        },
+                        };
+
+                        selected = match value {
+                            Some(Taml::Map(map)) => Selection::Map(map),
+                            Some(Taml::List(list)) => Selection::List(list),
+                            Some(_) => return Err(()),
+                            None => return Ok(None),
+                        };
                     }
                 }
-                Ok(Some(selected))
             }
         }
+
+        Ok(Some(selected))
+    }
+
+    fn instantiate<'b>(
+        self,
+        path: impl IntoIterator<Item = &'b BasicPathElement<'a>>,
+    ) -> Result<Selection<'a>, ()>
+    where
+        'a: 'b,
+    {
+        let mut selection = self;
+        for path_element in path {
+            let map = match selection {
+                Selection::Map(map) => map,
+                _ => return Err(()),
+            };
+            let value = match path_element {
+                BasicPathElement::Plain(key) => map
+                    .entry(key.clone())
+                    .or_insert_with(|| Taml::Map(HashMap::new())),
+                BasicPathElement::List(key) => {
+                    let list = map.entry(key.clone()).or_insert_with(|| Taml::List(vec![]));
+                    match list {
+                        Taml::List(list) => {
+                            list.push(Taml::Map(HashMap::new()));
+                            list.last_mut().unwrap()
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+            };
+            selection = match value {
+                Taml::List(list) => Selection::List(list),
+                Taml::Map(map) => Selection::Map(map),
+                _ => return Err(()),
+            };
+        }
+        Ok(selection)
     }
 }
 
@@ -271,15 +370,7 @@ fn parse_value<'a>(
                 Token::Paren => {
                     let mut items = vec![];
                     while iter.peek().ok_or(Expected::Unspecific)? != &Token::Thesis {
-                        items.push(
-                            parse_value(iter)
-                                .map_err(|error| match error {
-                                    Expected::Unspecific | Expected::Unspecific => {
-                                        Expected::Unspecific
-                                    }
-                                })?
-                                .ok_or(Expected::Unspecific)?,
-                        )
+                        items.push(parse_value(iter)?.ok_or(Expected::Unspecific)?)
                     }
                     assert_eq!(iter.next().unwrap(), Token::Thesis);
                     Taml::List(items)
