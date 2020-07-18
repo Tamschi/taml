@@ -19,6 +19,7 @@ codemap-diagnostic = { version = "0.1.1", optional = true }
 gnaw = { path = "../gnaw" }
 lazy-transform-str = { path = "../lazy-transform-str" }
 logos = "0.11.4"
+map-next = { path = "../map-next", optional = true }
 serde = "1.0.114"
 smartstring = "0.2.3"
 woc = { path = "../woc" }

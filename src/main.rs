@@ -2,9 +2,11 @@
 #![allow(unused_variables)] //TODO
 #![allow(clippy::default_trait_access)] // because of derive(FromArgs).
 
+use std::ops::Range;
 use {
     argh::FromArgs,
     logos::Logos as _,
+    map_next::MapNext as _,
     std::{
         ffi::OsStr,
         fs,
@@ -218,12 +220,15 @@ fn main() {
 
                 let text = fs::read_to_string(path.as_ref()).unwrap();
 
-                //TODO: This currently doesn't capture EOF correctly.
-                // `span` should be set to `None` when the lexer's `.next()` method returns `None`.
                 let mut span = None;
-                let lexer = Token::lexer(&text).spanned().map(|(t, s)| {
-                    span = Some(s);
-                    t
+                let lexer = Token::lexer(&text).spanned().map_next(|next| {
+                    if let Some((t, s)) = next {
+                        span = Some(s);
+                        Some(t)
+                    } else {
+                        span = None;
+                        None
+                    }
                 });
 
                 match lexer.collect() {
