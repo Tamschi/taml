@@ -26,5 +26,5 @@ woc = { path = "../woc" }
 cast = "0.2.3"
 
 [features]
-bin-dependencies = ["argh", "codemap", "codemap-diagnostic"]
+bin-dependencies = ["argh", "codemap", "codemap-diagnostic", "map-next"]
 default = ["bin-dependencies"]

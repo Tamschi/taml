@@ -1,3 +1,5 @@
+//TODO: This entire file needs to have its types simplified.
+
 use {
     crate::token::Token,
     smartstring::alias::String,
@@ -8,6 +10,7 @@ use {
     woc::Woc,
 };
 
+//TODO: Implement specific errors and Display.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Expected {
