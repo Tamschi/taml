@@ -8,7 +8,7 @@
 "$sewer/amb_flies", 0.1
 "$sewer/amb_hum", 0.05
 
-# "Error"
+#
 
 # [moments]
 sound: "$sewer/moments/*"
@@ -17,3 +17,4 @@ first-interval-no-min: true
 interval-range: (10, 60)
 volume-range: (0.1, 0.15)
 `spaced \` identifier`: "asdhasd kjhdajkh"
+eof:
