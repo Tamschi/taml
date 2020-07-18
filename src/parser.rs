@@ -8,6 +8,7 @@ use {
     woc::Woc,
 };
 
+#[derive(Debug)]
 #[non_exhaustive]
 pub enum Expected {
     Unspecific,

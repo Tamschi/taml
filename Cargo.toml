@@ -14,13 +14,16 @@ required-features = ["bin-dependencies"]
 
 [dependencies]
 argh = { version = "0.1.3", optional = true }
+codemap = { version = "0.1.3", optional = true }
+codemap-diagnostic = { version = "0.1.1", optional = true }
 gnaw = { path = "../gnaw" }
 lazy-transform-str = { path = "../lazy-transform-str" }
 logos = "0.11.4"
 serde = "1.0.114"
 smartstring = "0.2.3"
 woc = { path = "../woc" }
+cast = "0.2.3"
 
 [features]
-bin-dependencies = ["argh"]
+bin-dependencies = ["argh", "codemap", "codemap-diagnostic"]
 default = ["bin-dependencies"]

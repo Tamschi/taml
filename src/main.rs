@@ -28,8 +28,7 @@ struct Arghs {
 #[argh(subcommand)]
 enum SubCommand {
     Fmt(Fmt),
-    #[cfg(debug_assertions)]
-    Parse(Parse),
+    Check(Check),
 }
 
 #[derive(Debug, FromArgs)]
@@ -42,15 +41,19 @@ struct Fmt {
     path: Option<PathBuf>,
 }
 
-#[cfg(debug_assertions)]
 #[derive(Debug, FromArgs)]
-/// Parse TAML files.
-#[argh(subcommand, name = "parse")]
-struct Parse {
+/// Validate TAML files.
+/// Exit code: number of errors reported
+#[argh(subcommand, name = "check")]
+struct Check {
     #[argh(positional)]
-    /// A file or folder to parse.
+    /// A file or folder to validate.
     /// Defaults to `.`.
     path: Option<PathBuf>,
+
+    /// hide scanned files from stdout
+    #[argh(switch, short = 'q')]
+    quiet: bool,
 }
 
 //TODO: Atomic file replacements.
@@ -141,33 +144,68 @@ fn main() {
             }
         }
 
-        #[cfg(debug_assertions)]
-        SubCommand::Parse(Parse { path }) => {
-            let path = path.unwrap_or_else(|| ".".into());
-            parse_path(&path);
+        SubCommand::Check(Check { path, quiet }) => {
+            use {
+                codemap::CodeMap,
+                codemap_diagnostic::{
+                    ColorConfig, Diagnostic, Emitter, Level, SpanLabel, SpanStyle,
+                },
+            };
 
-            fn parse_path(path: impl AsRef<Path>) {
+            let path = path.unwrap_or_else(|| ".".into());
+
+            let mut codemap = CodeMap::new();
+            let mut diagnostics = vec![];
+            check_path(&path, &mut codemap, &mut diagnostics, quiet);
+
+            if !diagnostics.is_empty() {
+                let mut emitter = Emitter::stderr(ColorConfig::Auto, Some(&codemap));
+                emitter.emit(&diagnostics);
+            }
+
+            std::process::exit(
+                cast::i32(diagnostics.len()).expect("Too many diagnostics for exit code"),
+            );
+
+            //TODO: I should refactor these into closures with fewer arguments.
+            fn check_path(
+                path: impl AsRef<Path>,
+                codemap: &mut CodeMap,
+                diagnostics: &mut Vec<Diagnostic>,
+                quiet: bool,
+            ) {
                 let meta = fs::metadata(path.as_ref()).unwrap();
                 if meta.is_dir() {
-                    parse_dir(path)
+                    check_dir(path, codemap, diagnostics, quiet)
                 } else {
-                    parse_file(path, false)
+                    check_file(path, false, codemap, diagnostics, quiet)
                 }
             }
 
-            fn parse_dir(path: impl AsRef<Path>) {
+            fn check_dir(
+                path: impl AsRef<Path>,
+                codemap: &mut CodeMap,
+                diagnostics: &mut Vec<Diagnostic>,
+                quiet: bool,
+            ) {
                 for entry in fs::read_dir(path).unwrap() {
                     let entry = entry.unwrap();
                     let meta = entry.metadata().unwrap();
                     if meta.is_dir() {
-                        parse_dir(entry.path())
+                        check_dir(entry.path(), codemap, diagnostics, quiet)
                     } else if meta.is_file() {
-                        parse_file(entry.path(), true)
+                        check_file(entry.path(), true, codemap, diagnostics, quiet)
                     }
                 }
             }
 
-            fn parse_file(path: impl AsRef<Path>, check_extension: bool) {
+            fn check_file(
+                path: impl AsRef<Path>,
+                check_extension: bool,
+                codemap: &mut CodeMap,
+                diagnostics: &mut Vec<Diagnostic>,
+                quiet: bool,
+            ) {
                 if check_extension {
                     if let Some(extension) = path.as_ref().extension().and_then(OsStr::to_str) {
                         if extension.to_ascii_lowercase() != "taml" {
@@ -179,13 +217,53 @@ fn main() {
                 }
 
                 let text = fs::read_to_string(path.as_ref()).unwrap();
-                let mut lexer = Token::lexer(&text).spanned();
 
-                match lexer.by_ref().map(|(t, _)| t).collect() {
-                    Ok(taml) => {
-                        dbg!(taml);
+                //TODO: This currently doesn't capture EOF correctly.
+                // `span` should be set to `None` when the lexer's `.next()` method returns `None`.
+                let mut span = None;
+                let lexer = Token::lexer(&text).spanned().map(|(t, s)| {
+                    span = Some(s);
+                    t
+                });
+
+                match lexer.collect() {
+                    Ok(taml) =>
+                    {
+                        #[allow(clippy::non_ascii_literal)]
+                        if !quiet {
+                            println!("✓ {}", path.as_ref().to_string_lossy())
+                        }
                     }
-                    Err(expected) => panic!(expected),
+                    Err(expected) => {
+                        #[allow(clippy::non_ascii_literal)]
+                        if !quiet {
+                            println!("✕ {}", path.as_ref().to_string_lossy())
+                        }
+                        let file_span = codemap
+                            .add_file(path.as_ref().to_string_lossy().to_string(), text)
+                            .span;
+
+                        let error_span = if let Some(error_span) = span {
+                            file_span.subspan(error_span.start as u64, error_span.end as u64)
+                        } else {
+                            file_span.subspan(file_span.len(), file_span.len())
+                        };
+
+                        let label = SpanLabel {
+                            span: error_span,
+                            style: SpanStyle::Primary,
+                            label: Some(format!("Expected {:?}", expected)),
+                        };
+
+                        let diagnostic = Diagnostic {
+                            level: Level::Error,
+                            message: "".to_owned(),
+                            code: None,
+                            spans: vec![label],
+                        };
+
+                        diagnostics.push(diagnostic)
+                    }
                 }
             }
         }
