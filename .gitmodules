@@ -14,3 +14,6 @@
 [submodule "gnaw"]
 	path = gnaw
 	url = https://github.com/Tamschi/gnaw.git
+[submodule "map-next"]
+	path = map-next
+	url = https://github.com/Tamschi/map-next.git
