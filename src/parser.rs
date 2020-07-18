@@ -2,7 +2,7 @@ use {
     crate::token::Token,
     smartstring::alias::String,
     std::{
-        collections::HashMap,
+        collections::{hash_map, HashMap},
         iter::{FromIterator, Peekable},
     },
     woc::Woc,
@@ -13,8 +13,10 @@ pub enum Expected {
     Unspecific,
 }
 
+#[derive(Debug)]
 pub enum Taml<'a> {
     String(Woc<'a, String, str>),
+    Boolean(bool),
     Integer(&'a str),
     Float(&'a str),
     List(Vec<Taml<'a>>),
@@ -26,6 +28,7 @@ struct PathSegment<'a> {
     tabular: Option<TabularPathSegment<'a>>,
 }
 
+#[derive(Clone)]
 enum BasicPathElement<'a> {
     Plain(Woc<'a, String, str>),
     List(Woc<'a, String, str>),
@@ -36,11 +39,55 @@ struct TabularPathSegment<'a> {
     multi: Option<Vec<TabularPathSegment<'a>>>,
 }
 
+type Map<'a> = HashMap<Woc<'a, String, str>, Taml<'a>>;
+
 impl<'a> TabularPathSegment<'a> {
     fn arity(&self) -> usize {
         match &self.multi {
             None => 1,
             Some(multi) => multi.iter().map(Self::arity).sum(),
+        }
+    }
+
+    fn assign(
+        &self,
+        selection: &mut Map<'a>,
+        values: &mut impl Iterator<Item = Taml<'a>>,
+    ) -> Result<(), ()> {
+        let Selection::Map(selection) = Selection::Map(selection)
+            .instantiate(self.base.iter().take(self.base.len() - 1).cloned())?;
+
+        //TODO: Fail if keys exist!
+        let selection = match self.base.last().unwrap() {
+            BasicPathElement::Plain(key) => selection
+                .entry(key.clone())
+                .or_insert_with(|| Taml::String(Woc::Borrowed("PLACEHOLDER"))),
+            BasicPathElement::List(key) => {
+                let list = match selection
+                    .entry(key.clone())
+                    .or_insert_with(|| Taml::List(vec![]))
+                {
+                    Taml::List(list) => list,
+                    _ => unreachable!(),
+                };
+                list.push(Taml::String(Woc::Borrowed("PLACEHOLDER")));
+                list.last_mut().unwrap()
+            }
+        };
+
+        if let Some(multi) = &self.multi {
+            *selection = Taml::Map(HashMap::new());
+            let selection = match selection {
+                Taml::Map(map) => map,
+                _ => unreachable!(),
+            };
+            for child in multi {
+                child.assign(selection, values.by_ref())?
+            }
+            Ok(())
+        } else {
+            *selection = values.next().ok_or(())?;
+            Ok(())
         }
     }
 }
@@ -51,48 +98,78 @@ impl<'a> FromIterator<Token<'a>> for Result<HashMap<Woc<'a, String, str>, Taml<'
 
         let mut taml = HashMap::new();
 
-        parse_section(&mut iter, &mut Selection::Map(&mut taml), 0)?;
+        let mut path = vec![];
+
+        let mut selection = Selection::Map(&mut taml);
+
+        while let Some(next) = iter.peek() {
+            match next {
+                Token::Comment(_) => assert!(matches!(iter.next().unwrap(), Token::Comment(_))),
+                Token::HeadingHashes(_) => {
+                    let depth = match iter.next().unwrap() {
+                        Token::HeadingHashes(count) => count,
+                        _ => unreachable!(),
+                    };
+
+                    path.truncate(depth - 1);
+                    if path.len() != depth - 1 {
+                        return Err(Expected::Unspecific);
+                    }
+                    if path
+                        .last()
+                        .and_then(|s: &PathSegment| s.tabular.as_ref())
+                        .is_some()
+                    {
+                        return Err(Expected::Unspecific);
+                    }
+
+                    let new_segment = parse_path_segment(&mut iter)?;
+
+                    selection = Selection::Map(&mut taml)
+                        .get_last_mut(path.iter())
+                        .map_err(|()| Expected::Unspecific)?
+                        .ok_or(Expected::Unspecific)?
+                        .instantiate(new_segment.base.iter().cloned())
+                        .map_err(|()| Expected::Unspecific)?;
+
+                    path.push(new_segment);
+                }
+                Token::Newline => assert_eq!(iter.next().unwrap(), Token::Newline),
+                _ => match &mut selection {
+                    Selection::Map(selection) => {
+                        #[allow(clippy::single_match_else)]
+                        match path.last().and_then(|s| s.tabular.as_ref()) {
+                            Some(tabular) => {
+                                let n = tabular.arity();
+                                let values = parse_values_line(&mut iter, n)?;
+
+                                tabular
+                                    .assign(*selection, &mut values.into_iter())
+                                    .map_err(|()| Expected::Unspecific)?
+                            }
+                            None => {
+                                let kv =
+                                    parse_key_value_pair(&mut iter)?.ok_or(Expected::Unspecific)?;
+                                if let hash_map::Entry::Vacant(vacant) = selection.entry(kv.0) {
+                                    vacant.insert(kv.1);
+                                } else {
+                                    return Err(Expected::Unspecific);
+                                }
+                            }
+                        }
+                    }
+                },
+            }
+        }
 
         Ok(taml)
     }
 }
 
-fn parse_section<'a, 'b>(
-    iter: &mut Peekable<impl Iterator<Item = Token<'b>>>,
-    selection: &'a mut Selection<'a, 'b>,
-    depth: usize,
-) -> Result<(), Expected> {
-    while let Some(next) = iter.peek() {
-        match next {
-            Token::Comment(_) => assert!(matches!(iter.next().unwrap(), Token::Comment(_))),
-            Token::Newline => assert_eq!(iter.next().unwrap(), Token::Newline),
-            Token::HeadingHashes(count) if *count == depth + 1 => {
-                let mut selection = parse_heading(iter, selection, depth)?.unwrap();
-
-                parse_section(iter, &mut selection, depth + 1)?
-            }
-            Token::HeadingHashes(count) if *count <= depth => return Ok(()),
-            Token::HeadingHashes(_) => return Err(Expected::Unspecific),
-            _ => todo!("Parse lines"),
-        }
-    }
-
-    Ok(())
-}
-
 //TODO: Fix lifetimes.
-fn parse_heading<'a, 'b, 'c>(
-    iter: &mut Peekable<impl Iterator<Item = Token<'b>>>,
-    selection: &'c mut Selection<'a, 'b>,
-    depth: usize,
-) -> Result<Option<Selection<'c, 'b>>, Expected> {
-    match iter.peek() {
-        Some(&Token::HeadingHashes(count)) if count == depth + 1 => {
-            assert_eq!(iter.next().unwrap(), Token::HeadingHashes(count))
-        }
-        _ => return Ok(None),
-    }
-
+fn parse_path_segment<'a, 'b, 'c>(
+    iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
+) -> Result<PathSegment<'a>, Expected> {
     let mut base = vec![];
     let mut tabular = None;
     loop {
@@ -132,20 +209,7 @@ fn parse_heading<'a, 'b, 'c>(
         }
     }
 
-    //TODO: This is a REALLY ugly hack.
-    let selection =
-        unsafe { std::mem::transmute_copy::<Selection<'_, 'b>, Selection<'c, 'b>>(selection) }
-            .instantiate(base.iter().map(|s| match s {
-                BasicPathElement::Plain(str) => {
-                    BasicPathElement::Plain(Woc::Owned(str.clone().into_owned()))
-                }
-                BasicPathElement::List(str) => {
-                    BasicPathElement::List(Woc::Owned(str.to_owned().clone().into_owned()))
-                }
-            }))
-            .map_err(|()| Expected::Unspecific)?;
-
-    Ok(Some(unsafe { std::mem::transmute(selection) }))
+    Ok(PathSegment { base, tabular })
 }
 
 fn parse_tabular_path_segments<'a>(
@@ -214,9 +278,9 @@ fn parse_tabular_path_segment<'a>(
     Ok(TabularPathSegment { base, multi })
 }
 
+//TODO: Get rid of this enum entirely.
 enum Selection<'a, 'b> {
     Map(&'a mut HashMap<Woc<'b, String, str>, Taml<'b>>),
-    List(&'a mut Vec<Taml<'b>>),
 }
 
 impl<'a, 'b> Selection<'a, 'b> {
@@ -235,10 +299,7 @@ impl<'a, 'b> Selection<'a, 'b> {
                     tabular: None,
                 } => {
                     for path_element in base {
-                        let map = match selected {
-                            Selection::Map(map) => map,
-                            _ => return Err(()),
-                        };
+                        let Selection::Map(map) = selected;
                         let value = match path_element {
                             BasicPathElement::Plain(key) => map.get_mut(key.as_ref()),
 
@@ -251,7 +312,6 @@ impl<'a, 'b> Selection<'a, 'b> {
 
                         selected = match value {
                             Some(Taml::Map(map)) => Selection::Map(map),
-                            Some(Taml::List(list)) => Selection::List(list),
                             Some(_) => return Err(()),
                             None => return Ok(None),
                         };
@@ -272,14 +332,10 @@ impl<'a, 'b> Selection<'a, 'b> {
     {
         let mut selection = match self {
             Selection::Map(map) => Selection::Map(map),
-            Selection::List(list) => Selection::List(list),
         };
 
         for path_element in path {
-            let map = match selection {
-                Selection::Map(map) => map,
-                _ => return Err(()),
-            };
+            let Selection::Map(map) = selection;
             let value = match path_element {
                 BasicPathElement::Plain(key) => map
                     .entry(key.clone())
@@ -296,7 +352,6 @@ impl<'a, 'b> Selection<'a, 'b> {
                 }
             };
             selection = match value {
-                Taml::List(list) => Selection::List(list),
                 Taml::Map(map) => Selection::Map(map),
                 _ => return Err(()),
             };
@@ -353,26 +408,45 @@ fn parse_value<'a>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
 ) -> Result<Option<Taml<'a>>, Expected> {
     Ok(match iter.peek().ok_or(Expected::Unspecific)? {
-        Token::HeadingHashes(_) | Token::Identifier(_) => None,
+        Token::HeadingHashes(_) => None,
 
-        Token::Paren | Token::String(_) | Token::Float(_) | Token::Integer(_) => {
-            Some(match iter.next().unwrap() {
-                Token::Paren => {
-                    let mut items = vec![];
-                    while iter.peek().ok_or(Expected::Unspecific)? != &Token::Thesis {
-                        items.push(parse_value(iter)?.ok_or(Expected::Unspecific)?)
+        Token::Paren
+        | Token::String(_)
+        | Token::Float(_)
+        | Token::Integer(_)
+        | Token::Identifier(_) => Some(match iter.next().unwrap() {
+            Token::Paren => {
+                let mut items = vec![];
+                while iter.peek().ok_or(Expected::Unspecific)? != &Token::Thesis {
+                    items.push(parse_value(iter)?.ok_or(Expected::Unspecific)?);
+                    match iter.peek() {
+                        Some(Token::Comma) => assert_eq!(iter.next().unwrap(), Token::Comma),
+                        _ => break,
                     }
+                }
+                if iter.peek() == Some(&Token::Thesis) {
                     assert_eq!(iter.next().unwrap(), Token::Thesis);
                     Taml::List(items)
+                } else {
+                    return Err(Expected::Unspecific);
                 }
+            }
 
-                Token::String(str) => Taml::String(str),
-                Token::Float(str) => Taml::Float(str),
-                Token::Integer(str) => Taml::Integer(str),
+            Token::String(str) => Taml::String(str),
+            Token::Float(str) => Taml::Float(str),
+            Token::Integer(str) => Taml::Integer(str),
+            Token::Identifier(str) => {
+                if str.as_ref() == "true" {
+                    Taml::Boolean(true)
+                } else if str.as_ref() == "false" {
+                    Taml::Boolean(false)
+                } else {
+                    return Ok(None);
+                }
+            }
 
-                _ => unreachable!(),
-            })
-        }
+            _ => unreachable!(),
+        }),
 
         _ => return Err(Expected::Unspecific),
     })

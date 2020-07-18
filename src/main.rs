@@ -28,6 +28,8 @@ struct Arghs {
 #[argh(subcommand)]
 enum SubCommand {
     Fmt(Fmt),
+    #[cfg(debug_assertions)]
+    Parse(Parse),
 }
 
 #[derive(Debug, FromArgs)]
@@ -40,7 +42,19 @@ struct Fmt {
     path: Option<PathBuf>,
 }
 
+#[cfg(debug_assertions)]
+#[derive(Debug, FromArgs)]
+/// Parse TAML files.
+#[argh(subcommand, name = "parse")]
+struct Parse {
+    #[argh(positional)]
+    /// A file or folder to parse.
+    /// Defaults to `.`.
+    path: Option<PathBuf>,
+}
+
 //TODO: Atomic file replacements.
+#[allow(clippy::too_many_lines)]
 fn main() {
     let arghs: Arghs = argh::from_env();
 
@@ -124,6 +138,55 @@ fn main() {
                 }
 
                 writeln!(&mut file).unwrap();
+            }
+        }
+
+        #[cfg(debug_assertions)]
+        SubCommand::Parse(Parse { path }) => {
+            let path = path.unwrap_or_else(|| ".".into());
+            parse_path(&path);
+
+            fn parse_path(path: impl AsRef<Path>) {
+                let meta = fs::metadata(path.as_ref()).unwrap();
+                if meta.is_dir() {
+                    parse_dir(path)
+                } else {
+                    parse_file(path, false)
+                }
+            }
+
+            fn parse_dir(path: impl AsRef<Path>) {
+                for entry in fs::read_dir(path).unwrap() {
+                    let entry = entry.unwrap();
+                    let meta = entry.metadata().unwrap();
+                    if meta.is_dir() {
+                        parse_dir(entry.path())
+                    } else if meta.is_file() {
+                        parse_file(entry.path(), true)
+                    }
+                }
+            }
+
+            fn parse_file(path: impl AsRef<Path>, check_extension: bool) {
+                if check_extension {
+                    if let Some(extension) = path.as_ref().extension().and_then(OsStr::to_str) {
+                        if extension.to_ascii_lowercase() != "taml" {
+                            return;
+                        }
+                    } else {
+                        return;
+                    }
+                }
+
+                let text = fs::read_to_string(path.as_ref()).unwrap();
+                let mut lexer = Token::lexer(&text).spanned();
+
+                match lexer.by_ref().map(|(t, _)| t).collect() {
+                    Ok(taml) => {
+                        dbg!(taml);
+                    }
+                    Err(expected) => panic!(expected),
+                }
             }
         }
     }

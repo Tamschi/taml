@@ -6,7 +6,7 @@ use {serde::de, std::fmt::Display};
 
 pub mod formatting;
 //mod deserializer;
-mod parser;
+pub mod parser;
 pub mod token;
 
 type Result<'a, T> = std::result::Result<T, Error<'a>>;
