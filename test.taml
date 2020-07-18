@@ -1,8 +1,7 @@
 # [soundscapes]
 // Sewer
 
-//TODO: This currently breaks the parser
-#
+# // Resets to top level
 
 # [[loops].{sound, volume}]
 "$sewer/amb_drips", 0.8
