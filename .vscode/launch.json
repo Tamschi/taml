@@ -4,7 +4,6 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
         {
             "type": "lldb",
             "request": "launch",
@@ -58,6 +57,24 @@
                 }
             },
             "args": ["fmt"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug 'taml parse'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=taml",
+                    "--package=taml"
+                ],
+                "filter": {
+                    "name": "taml",
+                    "kind": "bin"
+                }
+            },
+            "args": ["parse"],
             "cwd": "${workspaceFolder}"
         },
         {
