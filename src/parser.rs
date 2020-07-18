@@ -172,6 +172,13 @@ fn parse_path_segment<'a, 'b, 'c>(
 ) -> Result<PathSegment<'a>, Expected> {
     let mut base = vec![];
     let mut tabular = None;
+
+    if let Some(next) = iter.peek() {
+        if matches!(next, Token::Comment(_) | Token::Newline) {
+            return Ok(PathSegment { base, tabular });
+        }
+    }
+
     loop {
         match iter.peek() {
             None => break,
