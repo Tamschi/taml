@@ -4,7 +4,7 @@ use {
     serde::de,
 };
 
-struct Deserializer<'de>(&'de Taml<'de>);
+struct Deserializer<'a, 'de>(&'a Taml<'de>);
 
 pub type Error = de::value::Error;
 pub type Result<T> = std::result::Result<T, Error>;
@@ -17,7 +17,7 @@ pub fn from_str<T: de::DeserializeOwned>(str: &str) -> Result<T> {
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn from_tokens<'de, T: de::DeserializeOwned>(
+pub fn from_tokens<'de, T: de::Deserialize<'de>>(
     tokens: impl IntoIterator<Item = Token<'de>>,
 ) -> Result<T> {
     //TODO: This seems overly explicit.
@@ -29,7 +29,7 @@ pub fn from_tokens<'de, T: de::DeserializeOwned>(
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn from_taml<'de, T: de::Deserialize<'de>>(taml: &'de Taml<'de>) -> Result<T> {
+pub fn from_taml<'de, T: de::Deserialize<'de>>(taml: &Taml<'de>) -> Result<T> {
     T::deserialize(Deserializer(&taml))
 }
 
@@ -65,7 +65,7 @@ fn invalid_value<'de>(unexp: &'de Taml<'de>, exp: &dyn de::Expected) -> Error {
     )
 }
 
-impl<'de> de::Deserializer<'de> for Deserializer<'de> {
+impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     type Error = Error;
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
     where
@@ -228,9 +228,9 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        struct ListAccess<'de>(ListIter<'de>);
+        struct ListAccess<'a, 'de>(ListIter<'a, 'de>);
 
-        impl<'de> de::SeqAccess<'de> for ListAccess<'de> {
+        impl<'a, 'de> de::SeqAccess<'de> for ListAccess<'a, 'de> {
             type Error = Error;
 
             fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
@@ -272,9 +272,9 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        struct MapAccess<'de>(MapIter<'de>, Option<&'de Taml<'de>>);
+        struct MapAccess<'a, 'de>(MapIter<'a, 'de>, Option<&'a Taml<'de>>);
 
-        impl<'de> de::MapAccess<'de> for MapAccess<'de> {
+        impl<'a, 'de> de::MapAccess<'de> for MapAccess<'a, 'de> {
             type Error = Error;
 
             fn next_key_seed<K: de::DeserializeSeed<'de>>(
@@ -300,9 +300,9 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
             }
         }
 
-        struct KeyDeserializer<'de>(&'de MapKey<'de>);
+        struct KeyDeserializer<'a, 'de>(&'a MapKey<'de>);
 
-        impl<'de> de::Deserializer<'de> for KeyDeserializer<'de> {
+        impl<'a, 'de> de::Deserializer<'de> for KeyDeserializer<'a, 'de> {
             type Error = Error;
 
             fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>

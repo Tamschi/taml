@@ -44,11 +44,11 @@ struct TabularPathSegment<'a> {
 }
 
 pub type Map<'a> = HashMap<MapKey<'a>, Taml<'a>>;
-pub type MapIter<'a> = hash_map::Iter<'a, MapKey<'a>, Taml<'a>>;
+pub type MapIter<'iter, 'taml> = hash_map::Iter<'iter, MapKey<'taml>, Taml<'taml>>;
 pub type MapKey<'a> = Woc<'a, String, str>;
 
 pub type List<'a> = Vec<Taml<'a>>;
-pub type ListIter<'a> = std::slice::Iter<'a, Taml<'a>>;
+pub type ListIter<'iter, 'taml> = std::slice::Iter<'iter, Taml<'taml>>;
 
 impl<'a> TabularPathSegment<'a> {
     fn arity(&self) -> usize {
