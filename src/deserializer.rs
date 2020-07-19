@@ -98,25 +98,49 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        match self.0 {
+            Taml::Integer(str) => {
+                let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                visitor.visit_i16(value)
+            }
+            other => Err(invalid_type(other, &visitor)),
+        }
     }
     fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        match self.0 {
+            Taml::Integer(str) => {
+                let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                visitor.visit_i32(value)
+            }
+            other => Err(invalid_type(other, &visitor)),
+        }
     }
     fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        match self.0 {
+            Taml::Integer(str) => {
+                let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                visitor.visit_i64(value)
+            }
+            other => Err(invalid_type(other, &visitor)),
+        }
     }
     fn deserialize_i128<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        match self.0 {
+            Taml::Integer(str) => {
+                let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                visitor.visit_i128(value)
+            }
+            other => Err(invalid_type(other, &visitor)),
+        }
     }
     fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value>
     where
@@ -134,74 +158,123 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        match self.0 {
+            Taml::Integer(str) => {
+                let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                visitor.visit_u16(value)
+            }
+            other => Err(invalid_type(self.0, &visitor)),
+        }
     }
     fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        match self.0 {
+            Taml::Integer(str) => {
+                let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                visitor.visit_u32(value)
+            }
+            other => Err(invalid_type(self.0, &visitor)),
+        }
     }
     fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        match self.0 {
+            Taml::Integer(str) => {
+                let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                visitor.visit_u64(value)
+            }
+            other => Err(invalid_type(self.0, &visitor)),
+        }
     }
     fn deserialize_u128<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        match self.0 {
+            Taml::Integer(str) => {
+                let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                visitor.visit_u128(value)
+            }
+            other => Err(invalid_type(self.0, &visitor)),
+        }
     }
     fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        match self.0 {
+            Taml::Float(str) => {
+                let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                visitor.visit_f32(value)
+            }
+            other => Err(invalid_type(self.0, &visitor)),
+        }
     }
     fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        match self.0 {
+            Taml::Float(str) => {
+                let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                visitor.visit_f64(value)
+            }
+            other => Err(invalid_type(self.0, &visitor)),
+        }
     }
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        match self.0 {
+            Taml::String(str) => {
+                let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                visitor.visit_char(value)
+            }
+            other => Err(invalid_type(self.0, &visitor)),
+        }
     }
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        match self.0 {
+            Taml::String(str) => visitor.visit_str(str),
+            other => Err(invalid_type(self.0, &visitor)),
+        }
     }
     fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        self.deserialize_str(visitor)
     }
     fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        unimplemented!("Byte slices are not supported")
     }
     fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        unimplemented!("Byte buffers are not supported")
     }
+
+    /// [`Option`]s are decoded as their contents and always [`Some(...)`] if present at all.
+    /// Use [`#[serde(default)]`] to parse a missing field as [`None`].
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
         visitor.visit_some(self)
     }
+
     fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
@@ -216,13 +289,13 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        self.deserialize_unit(visitor)
     }
     fn deserialize_newtype_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        visitor.visit_newtype_struct(self)
     }
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
     where
@@ -255,7 +328,8 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        //TODO: Check how this behaves on length mismatch.
+        self.deserialize_seq(visitor)
     }
     fn deserialize_tuple_struct<V>(
         self,
@@ -266,7 +340,8 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        //TODO: Check how this behaves on length mismatch.
+        self.deserialize_tuple(len, visitor)
     }
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value>
     where
@@ -347,7 +422,7 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        unimplemented!("Enums are not currently supported")
     }
     fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
     where
@@ -359,8 +434,9 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     where
         V: de::Visitor<'de>,
     {
-        todo!("{}", std::any::type_name::<V::Value>())
+        visitor.visit_unit()
     }
+
     fn is_human_readable(&self) -> bool {
         true
     }
