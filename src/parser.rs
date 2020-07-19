@@ -212,7 +212,7 @@ fn parse_path_segment<'a, 'b, 'c>(
                     _ => return Err(Expected::Unspecific),
                 }
             }
-            _ => return Err(Expected::Unspecific),
+            Some(_) => return Err(Expected::Unspecific),
         }
 
         if tabular.is_some() {
@@ -305,7 +305,7 @@ impl<'a, 'b> Selection<'a, 'b> {
         path: impl IntoIterator<Item = &'c PathSegment<'c>>,
     ) -> Result<Option<Selection<'a, 'b>>, ()> {
         let mut selected: Selection<'a, 'b> = self;
-        for segment in path.into_iter() {
+        for segment in path {
             match segment {
                 PathSegment {
                     tabular: Some(_), ..
@@ -378,7 +378,7 @@ impl<'a, 'b> Selection<'a, 'b> {
 
 fn parse_key_value_pair<'a>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
-) -> Result<Option<(Woc<'a, String, str>, Taml<'a>)>, Expected> {
+) -> Result<Option<(MapKey<'a>, Taml<'a>)>, Expected> {
     Ok(match iter.peek().ok_or(Expected::Unspecific)? {
         Token::HeadingHashes(_)
         | Token::Paren
