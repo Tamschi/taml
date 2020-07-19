@@ -4,8 +4,8 @@
 
 use {serde::de, std::fmt::Display};
 
+pub mod deserializer;
 pub mod formatting;
-//mod deserializer;
 pub mod parser;
 pub mod token;
 

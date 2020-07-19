@@ -2,7 +2,6 @@
 #![allow(unused_variables)] //TODO
 #![allow(clippy::default_trait_access)] // because of derive(FromArgs).
 
-use std::ops::Range;
 use {
     argh::FromArgs,
     logos::Logos as _,

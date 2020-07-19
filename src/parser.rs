@@ -43,7 +43,12 @@ struct TabularPathSegment<'a> {
     multi: Option<Vec<TabularPathSegment<'a>>>,
 }
 
-type Map<'a> = HashMap<Woc<'a, String, str>, Taml<'a>>;
+pub type Map<'a> = HashMap<MapKey<'a>, Taml<'a>>;
+pub type MapIter<'a> = hash_map::Iter<'a, MapKey<'a>, Taml<'a>>;
+pub type MapKey<'a> = Woc<'a, String, str>;
+
+pub type List<'a> = Vec<Taml<'a>>;
+pub type ListIter<'a> = std::slice::Iter<'a, Taml<'a>>;
 
 impl<'a> TabularPathSegment<'a> {
     fn arity(&self) -> usize {
@@ -96,11 +101,11 @@ impl<'a> TabularPathSegment<'a> {
     }
 }
 
-impl<'a> FromIterator<Token<'a>> for Result<HashMap<Woc<'a, String, str>, Taml<'a>>, Expected> {
+impl<'a> FromIterator<Token<'a>> for Result<Map<'a>, Expected> {
     fn from_iter<T: IntoIterator<Item = Token<'a>>>(iter: T) -> Self {
         let mut iter = iter.into_iter().peekable();
 
-        let mut taml = HashMap::new();
+        let mut taml = Map::new();
 
         let mut path = vec![];
 

@@ -1,246 +1,367 @@
+use crate::parser::{ListIter, MapIter, MapKey};
 use {
-    crate::{Error, Expected, Result},
-    serde::{
-        de::{self, Visitor},
-        Deserialize,
-    },
-    std::ops::{AddAssign, MulAssign, Neg},
+    crate::{parser::Taml, token::Token},
+    serde::de,
 };
 
-// SEE: https://serde.rs/impl-deserializer.html
+struct Deserializer<'de>(&'de Taml<'de>);
 
-pub struct Deserializer<'de> {
-    input: &'de str,
+pub type Error = de::value::Error;
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[allow(clippy::missing_errors_doc)]
+pub fn from_str<T: de::DeserializeOwned>(str: &str) -> Result<T> {
+    use logos::Logos as _;
+    let lexer = Token::lexer(str);
+    from_tokens(lexer)
 }
 
-impl<'de> Deserializer<'de> {
-    pub fn from_str(input: &'de str) -> Self {
-        Self { input }
-    }
+#[allow(clippy::missing_errors_doc)]
+pub fn from_tokens<'de, T: de::DeserializeOwned>(
+    tokens: impl IntoIterator<Item = Token<'de>>,
+) -> Result<T> {
+    //TODO: This seems overly explicit.
+    use std::iter::FromIterator as _;
+    let taml =
+        std::result::Result::<crate::parser::Map<'de>, crate::parser::Expected>::from_iter(tokens)
+            .map_err(|expected| de::Error::custom(format_args!("Expected {:?}", expected)))?;
+    from_taml(&Taml::Map(taml))
 }
 
-pub fn from_str<'a, T: Deserialize<'a>>(input: &'a str) -> Result<'a, T> {
-    let mut deserializer = Deserializer::from_str(input);
-    let t = T::deserialize(&mut deserializer)?;
-    if deserializer.input.is_empty() {
-        Ok(t)
-    } else {
-        Err(Error::TrailingCharacters(deserializer.input))
-    }
+#[allow(clippy::missing_errors_doc)]
+pub fn from_taml<'de, T: de::Deserialize<'de>>(taml: &'de Taml<'de>) -> Result<T> {
+    T::deserialize(Deserializer(&taml))
 }
 
-impl<'de> Deserializer<'de> {
-    fn peek_char(&self) -> Result<'static, char> {
-        self.input.chars().next().ok_or(Error::EndOfInput)
-    }
+fn invalid_type<'de>(unexp: &'de Taml<'de>, exp: &dyn de::Expected) -> Error {
+    de::Error::invalid_type(
+        match unexp {
+            Taml::String(str) => de::Unexpected::Str(str.as_ref()),
+            Taml::Boolean(bool) => de::Unexpected::Bool(*bool),
+            Taml::Integer(str) => de::Unexpected::Other("integer"), //TODO
+            Taml::Float(str) => str
+                .parse()
+                .map_or_else(|_| de::Unexpected::Other(str), de::Unexpected::Float),
+            Taml::List(_) => de::Unexpected::Seq,
+            Taml::Map(_) => de::Unexpected::Map,
+        },
+        exp,
+    )
+}
 
-    fn next_char(&mut self) -> Result<'static, char> {
-        let c = self.peek_char()?;
-        self.input = &self.input[c.len_utf8()..];
-        Ok(c)
-    }
+fn invalid_value<'de>(unexp: &'de Taml<'de>, exp: &dyn de::Expected) -> Error {
+    de::Error::invalid_type(
+        match unexp {
+            Taml::String(str) => de::Unexpected::Str(str.as_ref()),
+            Taml::Boolean(bool) => de::Unexpected::Bool(*bool),
+            Taml::Integer(str) => de::Unexpected::Other(str),
+            Taml::Float(str) => str
+                .parse()
+                .map_or_else(|_| de::Unexpected::Other(str), de::Unexpected::Float),
+            Taml::List(_) => de::Unexpected::Seq,
+            Taml::Map(_) => de::Unexpected::Map,
+        },
+        exp,
+    )
+}
 
-    fn parse_bool(&mut self) -> Result<'de, bool> {
-        const t: &str = "true";
-        const f: &str = "false";
-        if self.input.starts_with(t) {
-            self.input = &self.input[t.len()..];
-            Ok(true)
-        } else if self.input.starts_with(f) {
-            self.input = &self.input[f.len()..];
-            Ok(false)
+impl<'de> de::Deserializer<'de> for Deserializer<'de> {
+    type Error = Error;
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("any {}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        match self.0 {
+            Taml::Boolean(bool) => visitor.visit_bool(*bool),
+            other => Err(invalid_type(other, &visitor)),
+        }
+    }
+    fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        match self.0 {
+            Taml::Integer(str) => {
+                let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                visitor.visit_i8(value)
+            }
+            other => Err(invalid_type(other, &visitor)),
+        }
+    }
+    fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_i128<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        match self.0 {
+            Taml::Integer(str) => {
+                let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                visitor.visit_u8(value)
+            }
+            other => Err(invalid_type(self.0, &visitor)),
+        }
+    }
+    fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_u128<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_char<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_str<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        visitor.visit_some(self)
+    }
+    fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        if matches!(self.0, Taml::List(list) if list.is_empty()) {
+            visitor.visit_unit()
         } else {
-            Err(Error::Expected {
-                expected: Expected::Boolean,
-                rest: self.input,
-            })
+            Err(invalid_type(self.0, &visitor))
         }
     }
-
-    //TODO: Rework!
-    //TODO: Make checked!
-    fn parse_unsigned<T>(&mut self) -> Result<'de, T>
+    fn deserialize_unit_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value>
     where
-        T: AddAssign<T> + MulAssign<T> + From<u8>,
+        V: de::Visitor<'de>,
     {
-        let mut int = match self.next_char()? {
-            ch @ '0'..='9' => T::from(ch as u8 - b'0'),
-            _ => {
-                return Err(Error::Expected {
-                    expected: Expected::Integer,
-                    rest: self.input,
-                });
-            }
-        };
-        loop {
-            match self.input.chars().next() {
-                Some(ch @ '0'..='9') => {
-                    self.input = &self.input[1..];
-                    int *= T::from(10);
-                    int += T::from(ch as u8 - b'0');
-                }
-                _ => {
-                    return Ok(int);
-                }
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_newtype_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        struct ListAccess<'de>(ListIter<'de>);
+
+        impl<'de> de::SeqAccess<'de> for ListAccess<'de> {
+            type Error = Error;
+
+            fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
+            where
+                T: de::DeserializeSeed<'de>,
+            {
+                self.0
+                    .next()
+                    .map(|t| seed.deserialize(Deserializer(t)))
+                    .transpose()
             }
         }
-    }
 
-    //TODO: Rework!
-    //TODO: Make checked!
-    fn parse_signed<T>(&mut self) -> Result<'de, T>
-    where
-        T: Neg<Output = T> + AddAssign<T> + MulAssign<T> + From<i8>,
-    {
-        let negate = if self.peek_char()? == '-' {
-            self.next_char().unwrap();
-            true
-        } else {
-            false
-        };
-        let mut int = match self.next_char()? {
-            ch @ '0'..='9' => T::from((ch as u8 - b'0') as i8),
-            _ => {
-                return Err(Error::Expected {
-                    expected: Expected::Integer,
-                    rest: self.input,
-                });
-            }
+        let list = match self.0 {
+            Taml::List(list) => list,
+            other => return Err(invalid_type(other, &visitor)),
         };
 
-        loop {
-            match self.input.chars().next() {
-                Some(ch @ '0'..='9') => {
-                    self.input = &self.input[1..];
-                    int *= T::from(10);
-                    int += T::from((ch as u8 - b'0') as i8);
-                }
-                _ => {
-                    return Ok(if negate { -int } else { int });
-                }
-            }
-        }
+        visitor.visit_seq(ListAccess(list.iter()))
     }
-
-    fn unsupported<T>(&mut self) -> Result<'de, T> {
-        unimplemented!("{} not supported.", std::any::type_name::<T>())
-    }
-}
-
-macro_rules! defn {
-    ($fn:ident => $parse:ident | $visit:ident) => {
-        fn $fn<V: Visitor<'de>>(self, visitor: V) -> Result<'de, V::Value> {
-            visitor.$visit(self.$parse()?)
-        }
-    };
-}
-
-impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
-    type Error = Error<'de>;
-
-    fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<'de, V::Value>
+    fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
-        match self.peek_char()? {
-            _ => todo!(),
-        }
+        todo!("{}", std::any::type_name::<V::Value>())
     }
-
-    defn!(deserialize_bool => parse_bool | visit_bool);
-
-    defn!(deserialize_i8 => parse_signed | visit_i8);
-    defn!(deserialize_i16 => parse_signed | visit_i16);
-    defn!(deserialize_i32 => parse_signed | visit_i32);
-    defn!(deserialize_i64 => parse_signed | visit_i64);
-    defn!(deserialize_i128 => parse_signed | visit_i128); //TODO: >=1.26
-
-    defn!(deserialize_u8 => parse_unsigned | visit_u8);
-    defn!(deserialize_u16 => parse_unsigned | visit_u16);
-    defn!(deserialize_u32 => parse_unsigned | visit_u32);
-    defn!(deserialize_u64 => parse_unsigned | visit_u64);
-    defn!(deserialize_u128 => parse_unsigned | visit_u128); //TODO: >=1.26
-
-    defn!(deserialize_f32 => parse_float | visit_f32);
-    defn!(deserialize_f64 => parse_float | visit_f64);
-
-    defn!(deserialize_char => parse_char | visit_char);
-    defn!(deserialize_str => parse_str | visit_str);
-    defn!(deserialize_string => parse_string | visit_string);
-
-    defn!(deserialize_bytes => unsupported | visit_bytes);
-    defn!(deserialize_byte_buf => unsupported | visit_byte_buf);
-
-    fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<'de, V::Value> {
-        unimplemented!()
-    }
-
-    fn deserialize_unit<V: Visitor<'de>>(self, visitor: V) -> Result<'de, V::Value> {
-        unimplemented!()
-    }
-
-    fn deserialize_unit_struct<V: Visitor<'de>>(
-        self,
-        name: &'static str,
-        visitor: V,
-    ) -> Result<'de, V::Value> {
-        unimplemented!()
-    }
-
-    fn deserialize_newtype_struct<V: Visitor<'de>>(
-        self,
-        name: &'static str,
-        visitor: V,
-    ) -> Result<'de, V::Value> {
-        unimplemented!()
-    }
-
-    fn deserialize_seq<V: Visitor<'de>>(self, visitor: V) -> Result<'de, V::Value> {
-        unimplemented!()
-    }
-
-    fn deserialize_tuple<V: Visitor<'de>>(self, len: usize, visitor: V) -> Result<'de, V::Value> {
-        unimplemented!()
-    }
-
-    fn deserialize_tuple_struct<V: Visitor<'de>>(
+    fn deserialize_tuple_struct<V>(
         self,
         name: &'static str,
         len: usize,
         visitor: V,
-    ) -> Result<'de, V::Value> {
-        unimplemented!()
+    ) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
     }
+    fn deserialize_map<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        struct MapAccess<'de>(MapIter<'de>, Option<&'de Taml<'de>>);
 
-    fn deserialize_map<V: Visitor<'de>>(self, visitor: V) -> Result<'de, V::Value> {
-        unimplemented!()
+        impl<'de> de::MapAccess<'de> for MapAccess<'de> {
+            type Error = Error;
+
+            fn next_key_seed<K: de::DeserializeSeed<'de>>(
+                &mut self,
+                seed: K,
+            ) -> Result<Option<K::Value>> {
+                self.0
+                    .next()
+                    .map(|(k, v)| {
+                        self.1 = Some(v);
+                        seed.deserialize(KeyDeserializer(k))
+                    })
+                    .transpose()
+            }
+
+            fn next_value_seed<V: de::DeserializeSeed<'de>>(
+                &mut self,
+                seed: V,
+            ) -> Result<V::Value> {
+                seed.deserialize(Deserializer(
+                    self.1.expect("next_value_seed called before next_key_seed"),
+                ))
+            }
+        }
+
+        struct KeyDeserializer<'de>(&'de MapKey<'de>);
+
+        impl<'de> de::Deserializer<'de> for KeyDeserializer<'de> {
+            type Error = Error;
+
+            fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
+            where
+                V: de::Visitor<'de>,
+            {
+                dbg!(std::any::type_name::<V::Value>());
+                visitor.visit_str(self.0)
+            }
+
+            serde::forward_to_deserialize_any! {
+                bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+                bytes byte_buf option unit unit_struct newtype_struct seq tuple
+                tuple_struct map struct enum identifier ignored_any
+            }
+        }
+
+        let map = match self.0 {
+            Taml::Map(map) => map,
+            other => return Err(invalid_type(other, &visitor)),
+        };
+
+        visitor.visit_map(MapAccess(map.iter(), None))
     }
-
-    fn deserialize_struct<V: Visitor<'de>>(
+    fn deserialize_struct<V>(
         self,
         name: &'static str,
         fields: &'static [&'static str],
         visitor: V,
-    ) -> Result<'de, V::Value> {
-        unimplemented!()
+    ) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        self.deserialize_map(visitor)
     }
-
-    fn deserialize_enum<V: Visitor<'de>>(
+    fn deserialize_enum<V>(
         self,
         name: &'static str,
         variants: &'static [&'static str],
         visitor: V,
-    ) -> Result<'de, V::Value> {
-        unimplemented!()
+    ) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
     }
-
-    fn deserialize_identifier<V: Visitor<'de>>(self, visitor: V) -> Result<'de, V::Value> {
-        unimplemented!()
+    fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
     }
-
-    fn deserialize_ignored_any<V: Visitor<'de>>(self, visitor: V) -> Result<'de, V::Value> {
-        unimplemented!()
+    fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
     }
-
-    // is_human_readable => true
+    fn is_human_readable(&self) -> bool {
+        true
+    }
 }
