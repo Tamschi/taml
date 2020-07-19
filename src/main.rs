@@ -59,6 +59,7 @@ struct Check {
 
 //TODO: Atomic file replacements.
 #[allow(clippy::too_many_lines)]
+#[quit::main]
 fn main() {
     let arghs: Arghs = argh::from_env();
 
@@ -164,7 +165,7 @@ fn main() {
                 emitter.emit(&diagnostics);
             }
 
-            std::process::exit(
+            quit::with_code(
                 cast::i32(diagnostics.len()).expect("Too many diagnostics for exit code"),
             );
 

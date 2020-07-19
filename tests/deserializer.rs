@@ -19,6 +19,14 @@ fn deserializer() {
         zero_i8: i8,
         one_i8: i8,
         minus_one_i8: i8,
+
+        tabular: Vec<Tabular>,
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct Tabular {
+        first: u8,
+        second: u8,
     }
 
     assert_eq!(
@@ -35,6 +43,11 @@ fn deserializer() {
                 zero_i8: 0
                 one_i8: 1
                 minus_one_i8: -1
+
+                //TODO: Empty tabular sections should still create empty lists, and make sure the list didn't exist before.
+                # [[tabular].{first, second}]
+                0, 1
+                2, 3
             ",
         )),
         Ok(Deserializable {
@@ -51,6 +64,17 @@ fn deserializer() {
             zero_i8: 0,
             one_i8: 1,
             minus_one_i8: -1,
+
+            tabular: vec![
+                Tabular {
+                    first: 0,
+                    second: 1,
+                },
+                Tabular {
+                    first: 2,
+                    second: 3,
+                },
+            ]
         })
     );
 }
