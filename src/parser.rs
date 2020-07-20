@@ -14,6 +14,8 @@ use {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Expected {
+    ValueAlreadyExistsInStructuredEnumTargetSlot,
+    StructuredEnumVariantIdentifier,
     Unspecific,
 }
 
@@ -23,8 +25,10 @@ pub enum Taml<'a> {
     Boolean(bool),
     Integer(&'a str),
     Float(&'a str),
-    List(Vec<Taml<'a>>),
-    Map(HashMap<Woc<'a, String, str>, Taml<'a>>),
+    List(List<'a>),
+    Map(Map<'a>),
+    StructuredVariant { variant: Key<'a>, fields: Map<'a> },
+    TupleVariant { variant: Key<'a>, values: List<'a> },
 }
 
 struct PathSegment<'a> {
@@ -33,9 +37,15 @@ struct PathSegment<'a> {
 }
 
 #[derive(Clone)]
-enum BasicPathElement<'a> {
-    Plain(Woc<'a, String, str>),
-    List(Woc<'a, String, str>),
+struct BasicPathElement<'a> {
+    key: BasicPathElementKey<'a>,
+    variant: Option<Key<'a>>,
+}
+
+#[derive(Clone)]
+enum BasicPathElementKey<'a> {
+    Plain(Key<'a>),
+    List(Key<'a>),
 }
 
 struct TabularPathSegment<'a> {
@@ -43,9 +53,10 @@ struct TabularPathSegment<'a> {
     multi: Option<Vec<TabularPathSegment<'a>>>,
 }
 
-pub type Map<'a> = HashMap<MapKey<'a>, Taml<'a>>;
-pub type MapIter<'iter, 'taml> = hash_map::Iter<'iter, MapKey<'taml>, Taml<'taml>>;
-pub type MapKey<'a> = Woc<'a, String, str>;
+pub type Key<'a> = Woc<'a, String, str>;
+
+pub type Map<'a> = HashMap<Key<'a>, Taml<'a>>;
+pub type MapIter<'iter, 'taml> = hash_map::Iter<'iter, Key<'taml>, Taml<'taml>>;
 
 pub type List<'a> = Vec<Taml<'a>>;
 pub type ListIter<'iter, 'taml> = std::slice::Iter<'iter, Taml<'taml>>;
@@ -66,12 +77,12 @@ impl<'a> TabularPathSegment<'a> {
         let Selection::Map(selection) = Selection::Map(selection)
             .instantiate(self.base.iter().take(self.base.len() - 1).cloned())?;
 
-        //TODO: Fail if keys exist!
-        let selection = match self.base.last().unwrap() {
-            BasicPathElement::Plain(key) => selection
+        //TODO: Fail if plain keys exist!
+        let selection = match &self.base.last().unwrap().key {
+            BasicPathElementKey::Plain(key) => selection
                 .entry(key.clone())
                 .or_insert_with(|| Taml::String(Woc::Borrowed("PLACEHOLDER"))),
-            BasicPathElement::List(key) => {
+            BasicPathElementKey::List(key) => {
                 let list = match selection
                     .entry(key.clone())
                     .or_insert_with(|| Taml::List(vec![]))
@@ -84,18 +95,41 @@ impl<'a> TabularPathSegment<'a> {
             }
         };
 
+        let variant = self.base.last().unwrap().variant.as_ref();
+
         if let Some(multi) = &self.multi {
-            *selection = Taml::Map(HashMap::new());
-            let selection = match selection {
-                Taml::Map(map) => map,
-                _ => unreachable!(),
+            let selection = if let Some(variant) = variant {
+                *selection = Taml::StructuredVariant {
+                    variant: variant.clone(),
+                    fields: Map::new(),
+                };
+                match selection {
+                    Taml::StructuredVariant { variant: _, fields } => fields,
+                    _ => unreachable!(),
+                }
+            } else {
+                *selection = Taml::Map(HashMap::new());
+                match selection {
+                    Taml::Map(map) => map,
+                    _ => unreachable!(),
+                }
             };
             for child in multi {
                 child.assign(selection, values.by_ref())?
             }
             Ok(())
         } else {
-            *selection = values.next().ok_or(())?;
+            if let Some(variant) = variant {
+                *selection = Taml::TupleVariant {
+                    variant: variant.clone(),
+                    values: match values.next().ok_or(())? {
+                        Taml::List(list) => list,
+                        _ => return Err(()),
+                    },
+                }
+            } else {
+                *selection = values.next().ok_or(())?;
+            }
             Ok(())
         }
     }
@@ -141,20 +175,18 @@ impl<'a> FromIterator<Token<'a>> for Result<Map<'a>, Expected> {
                         .instantiate(new_segment.base.iter().cloned())
                         .map_err(|()| Expected::Unspecific)?;
 
-                    if let Some(tabular) = new_segment.tabular {
+                    if let Some(tabular) = new_segment.tabular.as_ref() {
                         // Create lists for empty headings too.
-                        if let Selection::Map(selection) = selection {
-                            if let BasicPathElement {
-                                key: BasicPathElementKey::List(key),
-                                variant: _,
-                            } = tabular.base.first().unwrap()
-                            {
-                                selection
-                                    .entry(key.clone())
-                                    .or_insert_with(|| Taml::List(List::new()));
-                            } else {
-                                unreachable!()
-                            }
+                        let Selection::Map(selection) = &mut selection;
+
+                        if let BasicPathElement {
+                            key: BasicPathElementKey::List(key),
+                            variant: _,
+                        } = tabular.base.first().unwrap()
+                        {
+                            selection
+                                .entry(key.clone())
+                                .or_insert_with(|| Taml::List(List::new()));
                         } else {
                             unreachable!()
                         }
@@ -169,11 +201,15 @@ impl<'a> FromIterator<Token<'a>> for Result<Map<'a>, Expected> {
                         match path.last().and_then(|s| s.tabular.as_ref()) {
                             Some(tabular) => {
                                 let n = tabular.arity();
-                                let values = parse_values_line(&mut iter, n)?;
+                                let mut values = parse_values_line(&mut iter, n)?;
 
                                 tabular
-                                    .assign(*selection, &mut values.into_iter())
-                                    .map_err(|()| Expected::Unspecific)?
+                                    .assign(*selection, &mut values.drain(..))
+                                    .map_err(|()| Expected::Unspecific)?;
+
+                                if !values.is_empty() {
+                                    return Err(Expected::Unspecific);
+                                }
                             }
                             None => {
                                 let kv =
@@ -194,7 +230,6 @@ impl<'a> FromIterator<Token<'a>> for Result<Map<'a>, Expected> {
     }
 }
 
-//TODO: Fix lifetimes.
 fn parse_path_segment<'a, 'b, 'c>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
 ) -> Result<PathSegment<'a>, Expected> {
@@ -207,27 +242,62 @@ fn parse_path_segment<'a, 'b, 'c>(
         }
     }
 
+    //TODO: Deduplicate the code here.
     loop {
         match iter.peek() {
             None => break,
             Some(Token::Identifier(_)) => match iter.next().unwrap() {
-                Token::Identifier(str) => base.push(BasicPathElement::Plain(str)),
+                Token::Identifier(str) => base.push(BasicPathElement {
+                    key: BasicPathElementKey::Plain(str),
+                    variant: if iter.peek() == Some(&Token::Colon) {
+                        assert_eq!(iter.next().unwrap(), Token::Colon);
+                        if !matches!(iter.peek(), Some(Token::Identifier(_))) {
+                            return Err(Expected::StructuredEnumVariantIdentifier);
+                        }
+                        match iter.next().unwrap() {
+                            Token::Identifier(str) => Some(str),
+                            _ => unreachable!(),
+                        }
+                    } else {
+                        None
+                    },
+                }),
                 _ => unreachable!(),
             },
             Some(Token::Brac) => {
                 assert_eq!(iter.next().unwrap(), Token::Brac);
                 match iter.peek().ok_or(Expected::Unspecific)? {
                     Token::Identifier(_) => match iter.next().unwrap() {
-                        Token::Identifier(str) => base.push(BasicPathElement::List(str)),
+                        Token::Identifier(str) => {
+                            match iter.peek() {
+                                Some(Token::Ket) => assert_eq!(iter.next().unwrap(), Token::Ket),
+                                _ => return Err(Expected::Unspecific),
+                            }
+                            base.push(BasicPathElement {
+                                key: BasicPathElementKey::List(str),
+                                variant: if iter.peek() == Some(&Token::Colon) {
+                                    assert_eq!(iter.next().unwrap(), Token::Colon);
+                                    if !matches!(iter.peek(), Some(Token::Identifier(_))) {
+                                        return Err(Expected::StructuredEnumVariantIdentifier);
+                                    }
+                                    match iter.next().unwrap() {
+                                        Token::Identifier(str) => Some(str),
+                                        _ => unreachable!(),
+                                    }
+                                } else {
+                                    None
+                                },
+                            })
+                        }
                         _ => unreachable!(),
                     },
                     Token::Brac => {
                         tabular = Some(parse_tabular_path_segment(iter)?);
+                        match iter.peek() {
+                            Some(Token::Ket) => assert_eq!(iter.next().unwrap(), Token::Ket),
+                            _ => return Err(Expected::Unspecific),
+                        }
                     }
-                    _ => return Err(Expected::Unspecific),
-                }
-                match iter.peek() {
-                    Some(Token::Ket) => assert_eq!(iter.next().unwrap(), Token::Ket),
                     _ => return Err(Expected::Unspecific),
                 }
             }
@@ -280,21 +350,54 @@ fn parse_tabular_path_segment<'a>(
                     _ => return Err(Expected::Unspecific),
                 }
             }
+
+            //TODO: Deduplicate the code
             Some(Token::Identifier(_)) => match iter.next().unwrap() {
-                Token::Identifier(str) => base.push(BasicPathElement::Plain(str)),
+                Token::Identifier(str) => base.push(BasicPathElement {
+                    key: BasicPathElementKey::Plain(str),
+                    variant: if iter.peek() == Some(&Token::Colon) {
+                        assert_eq!(iter.next().unwrap(), Token::Colon);
+                        if !matches!(iter.peek(), Some(Token::Identifier(_))) {
+                            return Err(Expected::StructuredEnumVariantIdentifier);
+                        }
+                        match iter.next().unwrap() {
+                            Token::Identifier(str) => Some(str),
+                            _ => unreachable!(),
+                        }
+                    } else {
+                        None
+                    },
+                }),
                 _ => unreachable!(),
             },
+
             Some(Token::Brac) => {
                 assert_eq!(iter.next().unwrap(), Token::Brac);
                 match iter.peek() {
                     Some(Token::Identifier(_)) => match iter.next().unwrap() {
-                        Token::Identifier(str) => base.push(BasicPathElement::List(str)),
+                        Token::Identifier(str) => {
+                            match iter.peek() {
+                                Some(Token::Ket) => assert_eq!(iter.next().unwrap(), Token::Ket),
+                                _ => return Err(Expected::Unspecific),
+                            };
+                            base.push(BasicPathElement {
+                                key: BasicPathElementKey::List(str),
+                                variant: if iter.peek() == Some(&Token::Colon) {
+                                    assert_eq!(iter.next().unwrap(), Token::Colon);
+                                    if !matches!(iter.peek(), Some(Token::Identifier(_))) {
+                                        return Err(Expected::StructuredEnumVariantIdentifier);
+                                    }
+                                    match iter.next().unwrap() {
+                                        Token::Identifier(str) => Some(str),
+                                        _ => unreachable!(),
+                                    }
+                                } else {
+                                    None
+                                },
+                            })
+                        }
                         _ => unreachable!(),
                     },
-                    _ => return Err(Expected::Unspecific),
-                }
-                match iter.peek() {
-                    Some(Token::Ket) => assert_eq!(iter.next().unwrap(), Token::Ket),
                     _ => return Err(Expected::Unspecific),
                 }
             }
@@ -335,20 +438,29 @@ impl<'a, 'b> Selection<'a, 'b> {
                 } => {
                     for path_element in base {
                         let Selection::Map(map) = selected;
-                        let value = match path_element {
-                            BasicPathElement::Plain(key) => map.get_mut(key.as_ref()),
+                        let value = match &path_element.key {
+                            BasicPathElementKey::Plain(key) => map.get_mut(key.as_ref()),
 
-                            BasicPathElement::List(key) => match map.get_mut(key.as_ref()) {
+                            BasicPathElementKey::List(key) => match map.get_mut(key.as_ref()) {
                                 Some(Taml::List(selected)) => selected.last_mut(),
                                 Some(_) => return Err(()),
                                 None => return Ok(None),
                             },
                         };
 
-                        selected = match value {
-                            Some(Taml::Map(map)) => Selection::Map(map),
-                            Some(_) => return Err(()),
-                            None => return Ok(None),
+                        selected = match (value, path_element.variant.as_ref()) {
+                            (Some(Taml::Map(map)), None) => Selection::Map(map),
+                            (
+                                Some(Taml::StructuredVariant {
+                                    variant: existing_variant,
+                                    fields,
+                                }),
+                                Some(expected_variant),
+                            ) if existing_variant.as_ref() == expected_variant.as_ref() => {
+                                Selection::Map(fields)
+                            }
+                            (Some(_), _) => return Err(()),
+                            (None, _) => return Ok(None),
                         };
                     }
                 }
@@ -365,39 +477,65 @@ impl<'a, 'b> Selection<'a, 'b> {
     where
         'a: 'c,
     {
-        let mut selection = match self {
-            Selection::Map(map) => Selection::Map(map),
-        };
+        let Selection::Map(mut selection) = self;
 
         for path_element in path {
-            let Selection::Map(map) = selection;
-            let value = match path_element {
-                BasicPathElement::Plain(key) => map
-                    .entry(key.clone())
-                    .or_insert_with(|| Taml::Map(HashMap::new())),
-                BasicPathElement::List(key) => {
-                    let list = map.entry(key.clone()).or_insert_with(|| Taml::List(vec![]));
+            selection = match path_element.key {
+                BasicPathElementKey::Plain(key) => {
+                    let entry = selection.entry(key.clone());
+                    let taml = match (entry, path_element.variant) {
+                        (hash_map::Entry::Occupied(occupied), None) => occupied.into_mut(),
+                        (hash_map::Entry::Occupied(_), Some(_)) => return Err(()),
+                        (hash_map::Entry::Vacant(vacant), None) => {
+                            vacant.insert(Taml::Map(Map::new()))
+                        }
+                        (hash_map::Entry::Vacant(vacant), Some(variant)) => {
+                            vacant.insert(Taml::StructuredVariant {
+                                variant,
+                                fields: Map::new(),
+                            })
+                        }
+                    };
+                    match taml {
+                        Taml::Map(map) => map,
+                        _ => return Err(()),
+                    }
+                }
+                BasicPathElementKey::List(key) => {
+                    let list = selection
+                        .entry(key.clone())
+                        .or_insert_with(|| Taml::List(vec![]));
                     match list {
                         Taml::List(list) => {
-                            list.push(Taml::Map(HashMap::new()));
-                            list.last_mut().unwrap()
+                            if let Some(variant) = path_element.variant {
+                                list.push(Taml::StructuredVariant {
+                                    variant,
+                                    fields: Map::new(),
+                                });
+                                match list.last_mut().unwrap() {
+                                    Taml::StructuredVariant { fields, .. } => fields,
+                                    _ => unreachable!(),
+                                }
+                            } else {
+                                list.push(Taml::Map(Map::new()));
+                                match list.last_mut().unwrap() {
+                                    Taml::Map(map) => map,
+                                    _ => unreachable!(),
+                                }
+                            }
                         }
                         _ => unreachable!(),
                     }
                 }
             };
-            selection = match value {
-                Taml::Map(map) => Selection::Map(map),
-                _ => return Err(()),
-            };
         }
-        Ok(selection)
+        Ok(Selection::Map(selection))
     }
 }
 
 fn parse_key_value_pair<'a>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
-) -> Result<Option<(MapKey<'a>, Taml<'a>)>, Expected> {
+) -> Result<Option<(Key<'a>, Taml<'a>)>, Expected> {
     Ok(match iter.peek().ok_or(Expected::Unspecific)? {
         Token::HeadingHashes(_)
         | Token::Paren

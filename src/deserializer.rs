@@ -1,4 +1,4 @@
-use crate::parser::{ListIter, MapIter, MapKey};
+use crate::parser::{Key, List, ListIter, Map, MapIter};
 use {
     crate::{parser::Taml, token::Token},
     serde::de,
@@ -44,6 +44,12 @@ fn invalid_type<'de>(unexp: &'de Taml<'de>, exp: &dyn de::Expected) -> Error {
                 .map_or_else(|_| de::Unexpected::Other(str), de::Unexpected::Float),
             Taml::List(_) => de::Unexpected::Seq,
             Taml::Map(_) => de::Unexpected::Map,
+            Taml::StructuredVariant { .. } => de::Unexpected::StructVariant,
+            Taml::TupleVariant { values, .. } => match values.len() {
+                0 => de::Unexpected::UnitVariant,
+                1 => de::Unexpected::NewtypeVariant,
+                _ => de::Unexpected::TupleVariant,
+            },
         },
         exp,
     )
@@ -60,6 +66,12 @@ fn invalid_value<'de>(unexp: &'de Taml<'de>, exp: &dyn de::Expected) -> Error {
                 .map_or_else(|_| de::Unexpected::Other(str), de::Unexpected::Float),
             Taml::List(_) => de::Unexpected::Seq,
             Taml::Map(_) => de::Unexpected::Map,
+            Taml::StructuredVariant { .. } => de::Unexpected::StructVariant,
+            Taml::TupleVariant { values, .. } => match values.len() {
+                0 => de::Unexpected::UnitVariant,
+                1 => de::Unexpected::NewtypeVariant,
+                _ => de::Unexpected::TupleVariant,
+            },
         },
         exp,
     )
@@ -301,28 +313,10 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     where
         V: de::Visitor<'de>,
     {
-        struct ListAccess<'a, 'de>(ListIter<'a, 'de>);
-
-        impl<'a, 'de> de::SeqAccess<'de> for ListAccess<'a, 'de> {
-            type Error = Error;
-
-            fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
-            where
-                T: de::DeserializeSeed<'de>,
-            {
-                self.0
-                    .next()
-                    .map(|t| seed.deserialize(Deserializer(t)))
-                    .transpose()
-            }
+        match self.0 {
+            Taml::List(list) => de::Deserializer::deserialize_seq(ListDeserializer(list), visitor),
+            other => Err(invalid_type(other, &visitor)),
         }
-
-        let list = match self.0 {
-            Taml::List(list) => list,
-            other => return Err(invalid_type(other, &visitor)),
-        };
-
-        visitor.visit_seq(ListAccess(list.iter()))
     }
     fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<V::Value>
     where
@@ -344,6 +338,156 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
         self.deserialize_tuple(len, visitor)
     }
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        match self.0 {
+            Taml::Map(map) => de::Deserializer::deserialize_map(MapDeserializer(map), visitor),
+            other => Err(invalid_type(other, &visitor)),
+        }
+    }
+    fn deserialize_struct<V>(
+        self,
+        name: &'static str,
+        fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        self.deserialize_map(visitor)
+    }
+    fn deserialize_enum<V>(
+        self,
+        name: &'static str,
+        variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        struct EnumVariantAccess<'a, 'de>(&'a Taml<'de>);
+
+        impl<'a, 'de> de::EnumAccess<'de> for EnumVariantAccess<'a, 'de> {
+            type Error = Error;
+            type Variant = Self;
+
+            fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant)>
+            where
+                V: de::DeserializeSeed<'de>,
+            {
+                Ok((
+                    seed.deserialize(KeyDeserializer(match self.0 {
+                        Taml::StructuredVariant { variant, .. }
+                        | Taml::TupleVariant { variant, .. } => variant,
+                        _ => unreachable!(),
+                    }))?,
+                    self,
+                ))
+            }
+        }
+
+        impl<'a, 'de> de::VariantAccess<'de> for EnumVariantAccess<'a, 'de> {
+            type Error = Error;
+
+            fn unit_variant(self) -> Result<()> {
+                match self.0 {
+                    Taml::TupleVariant { values, .. } if values.is_empty() => Ok(()),
+                    _ => Err(invalid_type(self.0, &"a unit")),
+                }
+            }
+
+            fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value>
+            where
+                T: de::DeserializeSeed<'de>,
+            {
+                match self.0 {
+                    Taml::TupleVariant { values, .. } if values.len() == 1 => {
+                        seed.deserialize(Deserializer(&values[0]))
+                    }
+                    _ => Err(invalid_type(self.0, &"a unit")),
+                }
+            }
+
+            fn tuple_variant<V>(self, _len: usize, visitor: V) -> Result<V::Value>
+            where
+                V: de::Visitor<'de>,
+            {
+                match self.0 {
+                    Taml::TupleVariant { values, .. } => {
+                        de::Deserializer::deserialize_seq(ListDeserializer(values), visitor)
+                    }
+                    _ => Err(invalid_type(self.0, &"a unit")),
+                }
+            }
+
+            fn struct_variant<V>(
+                self,
+                _fields: &'static [&'static str],
+                visitor: V,
+            ) -> Result<V::Value>
+            where
+                V: de::Visitor<'de>,
+            {
+                match self.0 {
+                    Taml::StructuredVariant { fields, .. } => {
+                        de::Deserializer::deserialize_map(MapDeserializer(fields), visitor)
+                    }
+                    _ => Err(invalid_type(self.0, &"a unit")),
+                }
+            }
+        }
+
+        match self.0 {
+            Taml::StructuredVariant { variant, .. } | Taml::TupleVariant { variant, .. } => {
+                visitor.visit_enum(EnumVariantAccess(self.0))
+            }
+            _ => Err(invalid_type(self.0, &visitor)),
+        }
+    }
+    fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!("{}", std::any::type_name::<V::Value>())
+    }
+    fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        visitor.visit_unit()
+    }
+
+    fn is_human_readable(&self) -> bool {
+        true
+    }
+}
+
+struct KeyDeserializer<'a, 'de>(&'a Key<'de>);
+
+impl<'a, 'de> de::Deserializer<'de> for KeyDeserializer<'a, 'de> {
+    type Error = Error;
+
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        visitor.visit_str(self.0)
+    }
+
+    serde::forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf option unit unit_struct newtype_struct seq tuple
+        tuple_struct map struct enum identifier ignored_any
+    }
+}
+
+struct MapDeserializer<'a, 'de>(&'a Map<'de>);
+
+impl<'a, 'de> de::Deserializer<'de> for MapDeserializer<'a, 'de> {
+    type Error = Error;
+
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
@@ -375,69 +519,47 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
             }
         }
 
-        struct KeyDeserializer<'a, 'de>(&'a MapKey<'de>);
+        visitor.visit_map(MapAccess(self.0.iter(), None))
+    }
 
-        impl<'a, 'de> de::Deserializer<'de> for KeyDeserializer<'a, 'de> {
+    serde::forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf option unit unit_struct newtype_struct seq tuple
+        tuple_struct map struct enum identifier ignored_any
+    }
+}
+
+struct ListDeserializer<'a, 'de>(&'a List<'de>);
+
+impl<'a, 'de> de::Deserializer<'de> for ListDeserializer<'a, 'de> {
+    type Error = Error;
+
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        struct ListAccess<'a, 'de>(ListIter<'a, 'de>);
+
+        impl<'a, 'de> de::SeqAccess<'de> for ListAccess<'a, 'de> {
             type Error = Error;
 
-            fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
+            fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
             where
-                V: de::Visitor<'de>,
+                T: de::DeserializeSeed<'de>,
             {
-                dbg!(std::any::type_name::<V::Value>());
-                visitor.visit_str(self.0)
-            }
-
-            serde::forward_to_deserialize_any! {
-                bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
-                bytes byte_buf option unit unit_struct newtype_struct seq tuple
-                tuple_struct map struct enum identifier ignored_any
+                self.0
+                    .next()
+                    .map(|t| seed.deserialize(Deserializer(t)))
+                    .transpose()
             }
         }
 
-        let map = match self.0 {
-            Taml::Map(map) => map,
-            other => return Err(invalid_type(other, &visitor)),
-        };
-
-        visitor.visit_map(MapAccess(map.iter(), None))
-    }
-    fn deserialize_struct<V>(
-        self,
-        name: &'static str,
-        fields: &'static [&'static str],
-        visitor: V,
-    ) -> Result<V::Value>
-    where
-        V: de::Visitor<'de>,
-    {
-        self.deserialize_map(visitor)
-    }
-    fn deserialize_enum<V>(
-        self,
-        name: &'static str,
-        variants: &'static [&'static str],
-        visitor: V,
-    ) -> Result<V::Value>
-    where
-        V: de::Visitor<'de>,
-    {
-        unimplemented!("Enums are not currently supported")
-    }
-    fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: de::Visitor<'de>,
-    {
-        todo!("{}", std::any::type_name::<V::Value>())
-    }
-    fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: de::Visitor<'de>,
-    {
-        visitor.visit_unit()
+        visitor.visit_seq(ListAccess(self.0.iter()))
     }
 
-    fn is_human_readable(&self) -> bool {
-        true
+    serde::forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf option unit unit_struct newtype_struct seq tuple
+        tuple_struct map struct enum identifier ignored_any
     }
 }

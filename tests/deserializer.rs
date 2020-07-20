@@ -23,6 +23,16 @@ fn deserializer() {
         empty_table: Vec<()>,
 
         tabular: Vec<Tabular>,
+
+        variants: Vec<Enum>,
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    enum Enum {
+        Structured { i32: i32, f64: f64 },
+        Tuple(u8, u8),
+        Newtype(u8),
+        Unit,
     }
 
     #[derive(Debug, Deserialize, PartialEq)]
@@ -36,6 +46,8 @@ fn deserializer() {
             "
                 some: ()
 
+                #
+
                 unit: ()
                 seq: (0, 1, 2)
 
@@ -48,9 +60,25 @@ fn deserializer() {
 
                 # [[empty_table]]
 
+                // TODO: # [[tabular].{{first, second}}] currently crashes when assigning values
+                // 0, 1
+
                 # [[tabular].{first, second}]
                 0, 1
                 2, 3
+
+                # [variants]:Structured
+                i32: 12345
+                f64: 6789.0
+
+                # [[variants]:Tuple]
+                (0, 1)
+
+                # [[variants]:Newtype]
+                (3)
+
+                # [[variants]:Unit]
+                ()
             ",
         )),
         Ok(Deserializable {
@@ -79,7 +107,17 @@ fn deserializer() {
                     first: 2,
                     second: 3,
                 },
-            ]
+            ],
+
+            variants: vec![
+                Enum::Structured {
+                    i32: 12345,
+                    f64: 6789.0
+                },
+                Enum::Tuple(0, 1),
+                Enum::Newtype(3),
+                Enum::Unit,
+            ],
         })
     );
 }
