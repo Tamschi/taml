@@ -141,6 +141,25 @@ impl<'a> FromIterator<Token<'a>> for Result<Map<'a>, Expected> {
                         .instantiate(new_segment.base.iter().cloned())
                         .map_err(|()| Expected::Unspecific)?;
 
+                    if let Some(tabular) = new_segment.tabular {
+                        // Create lists for empty headings too.
+                        if let Selection::Map(selection) = selection {
+                            if let BasicPathElement {
+                                key: BasicPathElementKey::List(key),
+                                variant: _,
+                            } = tabular.base.first().unwrap()
+                            {
+                                selection
+                                    .entry(key.clone())
+                                    .or_insert_with(|| Taml::List(List::new()));
+                            } else {
+                                unreachable!()
+                            }
+                        } else {
+                            unreachable!()
+                        }
+                    }
+
                     path.push(new_segment);
                 }
                 Token::Newline => assert_eq!(iter.next().unwrap(), Token::Newline),

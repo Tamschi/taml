@@ -20,6 +20,8 @@ fn deserializer() {
         one_i8: i8,
         minus_one_i8: i8,
 
+        empty_table: Vec<()>,
+
         tabular: Vec<Tabular>,
     }
 
@@ -44,7 +46,8 @@ fn deserializer() {
                 one_i8: 1
                 minus_one_i8: -1
 
-                //TODO: Empty tabular sections should still create empty lists, and make sure the list didn't exist before.
+                # [[empty_table]]
+
                 # [[tabular].{first, second}]
                 0, 1
                 2, 3
@@ -64,6 +67,8 @@ fn deserializer() {
             zero_i8: 0,
             one_i8: 1,
             minus_one_i8: -1,
+
+            empty_table: vec![],
 
             tabular: vec![
                 Tabular {
