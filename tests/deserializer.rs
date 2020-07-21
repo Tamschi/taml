@@ -25,6 +25,14 @@ fn deserializer() {
         tabular: Vec<Tabular>,
 
         variants: Vec<Enum>,
+
+        unit_variant: Enum,
+        weird_variant: Enum,
+        newtype_variant: Enum,
+        tuple_variant: Enum,
+
+        r#false: bool,
+        r#true: bool,
     }
 
     #[derive(Debug, Deserialize, PartialEq)]
@@ -33,6 +41,7 @@ fn deserializer() {
         Tuple(u8, u8),
         Newtype(u8),
         Unit,
+        Weird(),
     }
 
     #[derive(Debug, Deserialize, PartialEq)]
@@ -77,8 +86,21 @@ fn deserializer() {
                 # [[variants]:Newtype]
                 (3)
 
-                # [[variants]:Unit]
+                # [[variants]]
+                Unit
+
+                # [[variants]:Weird]
                 ()
+
+                #
+
+                unit_variant: Unit
+                weird_variant: Weird()
+                newtype_variant: Newtype(4)
+                tuple_variant: Tuple(5, 6)
+
+                false: false
+                true: true
             ",
         )),
         Ok(Deserializable {
@@ -117,7 +139,16 @@ fn deserializer() {
                 Enum::Tuple(0, 1),
                 Enum::Newtype(3),
                 Enum::Unit,
+                Enum::Weird(),
             ],
+
+            unit_variant: Enum::Unit,
+            weird_variant: Enum::Weird(),
+            newtype_variant: Enum::Newtype(4),
+            tuple_variant: Enum::Tuple(5, 6),
+
+            r#false: false,
+            r#true: true,
         })
     );
 }

@@ -37,7 +37,6 @@ fn invalid_type<'de>(unexp: &'de Taml<'de>, exp: &dyn de::Expected) -> Error {
     de::Error::invalid_type(
         match unexp {
             Taml::String(str) => de::Unexpected::Str(str.as_ref()),
-            Taml::Boolean(bool) => de::Unexpected::Bool(*bool),
             Taml::Integer(str) => de::Unexpected::Other("integer"), //TODO
             Taml::Float(str) => str
                 .parse()
@@ -46,10 +45,10 @@ fn invalid_type<'de>(unexp: &'de Taml<'de>, exp: &dyn de::Expected) -> Error {
             Taml::Map(_) => de::Unexpected::Map,
             Taml::StructuredVariant { .. } => de::Unexpected::StructVariant,
             Taml::TupleVariant { values, .. } => match values.len() {
-                0 => de::Unexpected::UnitVariant,
                 1 => de::Unexpected::NewtypeVariant,
                 _ => de::Unexpected::TupleVariant,
             },
+            Taml::UnitVariant { .. } => de::Unexpected::UnitVariant,
         },
         exp,
     )
@@ -59,7 +58,6 @@ fn invalid_value<'de>(unexp: &'de Taml<'de>, exp: &dyn de::Expected) -> Error {
     de::Error::invalid_type(
         match unexp {
             Taml::String(str) => de::Unexpected::Str(str.as_ref()),
-            Taml::Boolean(bool) => de::Unexpected::Bool(*bool),
             Taml::Integer(str) => de::Unexpected::Other(str),
             Taml::Float(str) => str
                 .parse()
@@ -68,10 +66,10 @@ fn invalid_value<'de>(unexp: &'de Taml<'de>, exp: &dyn de::Expected) -> Error {
             Taml::Map(_) => de::Unexpected::Map,
             Taml::StructuredVariant { .. } => de::Unexpected::StructVariant,
             Taml::TupleVariant { values, .. } => match values.len() {
-                0 => de::Unexpected::UnitVariant,
                 1 => de::Unexpected::NewtypeVariant,
                 _ => de::Unexpected::TupleVariant,
             },
+            Taml::UnitVariant { .. } => de::Unexpected::UnitVariant,
         },
         exp,
     )
@@ -90,7 +88,10 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
         V: de::Visitor<'de>,
     {
         match self.0 {
-            Taml::Boolean(bool) => visitor.visit_bool(*bool),
+            Taml::UnitVariant { variant } if variant.as_ref() == "true" => visitor.visit_bool(true),
+            Taml::UnitVariant { variant } if variant.as_ref() == "false" => {
+                visitor.visit_bool(false)
+            }
             other => Err(invalid_type(other, &visitor)),
         }
     }
@@ -366,7 +367,10 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     where
         V: de::Visitor<'de>,
     {
-        struct EnumVariantAccess<'a, 'de>(&'a Taml<'de>);
+        struct EnumVariantAccess<'a, 'de> {
+            variant: &'a Taml<'de>,
+            variant_accessed: &'a mut bool,
+        };
 
         impl<'a, 'de> de::EnumAccess<'de> for EnumVariantAccess<'a, 'de> {
             type Error = Error;
@@ -376,10 +380,12 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
             where
                 V: de::DeserializeSeed<'de>,
             {
+                *self.variant_accessed = true;
                 Ok((
-                    seed.deserialize(KeyDeserializer(match self.0 {
+                    seed.deserialize(KeyDeserializer(match self.variant {
                         Taml::StructuredVariant { variant, .. }
-                        | Taml::TupleVariant { variant, .. } => variant,
+                        | Taml::TupleVariant { variant, .. }
+                        | Taml::UnitVariant { variant } => variant,
                         _ => unreachable!(),
                     }))?,
                     self,
@@ -391,9 +397,10 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
             type Error = Error;
 
             fn unit_variant(self) -> Result<()> {
-                match self.0 {
-                    Taml::TupleVariant { values, .. } if values.is_empty() => Ok(()),
-                    _ => Err(invalid_type(self.0, &"a unit")),
+                *self.variant_accessed = true;
+                match self.variant {
+                    Taml::UnitVariant { .. } => Ok(()),
+                    _ => Err(invalid_type(self.variant, &"unit variant")),
                 }
             }
 
@@ -401,11 +408,12 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
             where
                 T: de::DeserializeSeed<'de>,
             {
-                match self.0 {
+                *self.variant_accessed = true;
+                match self.variant {
                     Taml::TupleVariant { values, .. } if values.len() == 1 => {
                         seed.deserialize(Deserializer(&values[0]))
                     }
-                    _ => Err(invalid_type(self.0, &"a unit")),
+                    _ => Err(invalid_type(self.variant, &"newtype variant")),
                 }
             }
 
@@ -413,11 +421,12 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
             where
                 V: de::Visitor<'de>,
             {
-                match self.0 {
+                *self.variant_accessed = true;
+                match self.variant {
                     Taml::TupleVariant { values, .. } => {
                         de::Deserializer::deserialize_seq(ListDeserializer(values), visitor)
                     }
-                    _ => Err(invalid_type(self.0, &"a unit")),
+                    _ => Err(invalid_type(self.variant, &visitor)),
                 }
             }
 
@@ -429,18 +438,32 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
             where
                 V: de::Visitor<'de>,
             {
-                match self.0 {
+                *self.variant_accessed = true;
+                match self.variant {
                     Taml::StructuredVariant { fields, .. } => {
                         de::Deserializer::deserialize_map(MapDeserializer(fields), visitor)
                     }
-                    _ => Err(invalid_type(self.0, &"a unit")),
+                    _ => Err(invalid_type(self.variant, &visitor)),
                 }
             }
         }
 
         match self.0 {
-            Taml::StructuredVariant { variant, .. } | Taml::TupleVariant { variant, .. } => {
-                visitor.visit_enum(EnumVariantAccess(self.0))
+            Taml::StructuredVariant { variant, .. }
+            | Taml::TupleVariant { variant, .. }
+            | Taml::UnitVariant { variant } => {
+                let mut variant_accessed = false;
+                let result = visitor.visit_enum(EnumVariantAccess {
+                    variant: self.0,
+                    variant_accessed: &mut variant_accessed,
+                });
+                if (!variant_accessed)
+                    && !matches!(self.0, Taml::TupleVariant{ values, ..} if values.is_empty())
+                {
+                    return Err(invalid_type(self.0, &"empty tuple variant"));
+                }
+
+                result
             }
             _ => Err(invalid_type(self.0, &visitor)),
         }

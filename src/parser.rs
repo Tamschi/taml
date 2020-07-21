@@ -22,13 +22,14 @@ pub enum Expected {
 #[derive(Debug)]
 pub enum Taml<'a> {
     String(Woc<'a, String, str>),
-    Boolean(bool),
     Integer(&'a str),
     Float(&'a str),
     List(List<'a>),
     Map(Map<'a>),
+    //TODO: Refactor these into a common variant.
     StructuredVariant { variant: Key<'a>, fields: Map<'a> },
     TupleVariant { variant: Key<'a>, values: List<'a> },
+    UnitVariant { variant: Key<'a> },
 }
 
 struct PathSegment<'a> {
@@ -609,12 +610,16 @@ fn parse_value<'a>(
             Token::Float(str) => Taml::Float(str),
             Token::Integer(str) => Taml::Integer(str),
             Token::Identifier(str) => {
-                if str.as_ref() == "true" {
-                    Taml::Boolean(true)
-                } else if str.as_ref() == "false" {
-                    Taml::Boolean(false)
+                if iter.peek() == Some(&Token::Paren) {
+                    match parse_value(iter)?.ok_or(Expected::Unspecific)? {
+                        Taml::List(list) => Taml::TupleVariant {
+                            variant: str,
+                            values: list,
+                        },
+                        _ => unreachable!(),
+                    }
                 } else {
-                    return Ok(None);
+                    Taml::UnitVariant { variant: str }
                 }
             }
 
