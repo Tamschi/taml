@@ -69,12 +69,12 @@ fn deserializer() {
 
                 # [[empty_table]]
 
-                // TODO: # [[tabular].{{first, second}}] currently crashes when assigning values
-                // 0, 1
-
                 # [[tabular].{first, second}]
                 0, 1
                 2, 3
+
+                # [[tabular].{{first, second}}]
+                4, 5
 
                 # [variants]:Structured
                 i32: 12345
@@ -128,6 +128,10 @@ fn deserializer() {
                 Tabular {
                     first: 2,
                     second: 3,
+                },
+                Tabular {
+                    first: 4,
+                    second: 5,
                 },
             ],
 

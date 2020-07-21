@@ -75,12 +75,22 @@ impl<'a> TabularPathSegment<'a> {
         selection: &mut Map<'a>,
         values: &mut impl Iterator<Item = Taml<'a>>,
     ) -> Result<(), ()> {
+        if self.base.is_empty() && self.multi.is_none() {
+            //TODO: Make sure these aren't accepted by the parser.
+            unreachable!("Completely empty tabular path segments are invalid.")
+        } else if self.base.is_empty() {
+            for child in self.multi.as_ref().unwrap() {
+                child.assign(selection, values)?
+            }
+
+            return Ok(());
+        }
+
         let selection = instantiate(
             selection,
             self.base.iter().take(self.base.len() - 1).cloned(),
         )?;
 
-        //TODO: Fail if plain keys exist!
         let selection = match &self.base.last().unwrap().key {
             BasicPathElementKey::Plain(key) => selection
                 .entry(key.clone())
