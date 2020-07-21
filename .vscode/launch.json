@@ -62,7 +62,7 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug 'taml parse'",
+            "name": "Debug 'taml check'",
             "cargo": {
                 "args": [
                     "build",
@@ -74,7 +74,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["parse"],
+            "args": ["check"],
             "cwd": "${workspaceFolder}"
         },
         {
