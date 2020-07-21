@@ -55,7 +55,7 @@ fn invalid_type<'de>(unexp: &'de Taml<'de>, exp: &dyn de::Expected) -> Error {
 }
 
 fn invalid_value<'de>(unexp: &'de Taml<'de>, exp: &dyn de::Expected) -> Error {
-    de::Error::invalid_type(
+    de::Error::invalid_value(
         match unexp {
             Taml::String(str) => de::Unexpected::Str(str.as_ref()),
             Taml::Integer(str) => de::Unexpected::Other(str),
@@ -323,8 +323,11 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     where
         V: de::Visitor<'de>,
     {
-        //TODO: Check how this behaves on length mismatch.
-        self.deserialize_seq(visitor)
+        match self.0 {
+            Taml::List(list) if list.len() == len => self.deserialize_seq(visitor),
+            Taml::List(list) => Err(de::Error::invalid_length(list.len(), &visitor)),
+            _ => Err(invalid_type(self.0, &visitor)),
+        }
     }
     fn deserialize_tuple_struct<V>(
         self,
@@ -335,7 +338,6 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     where
         V: de::Visitor<'de>,
     {
-        //TODO: Check how this behaves on length mismatch.
         self.deserialize_tuple(len, visitor)
     }
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value>
@@ -367,10 +369,7 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     where
         V: de::Visitor<'de>,
     {
-        struct EnumVariantAccess<'a, 'de> {
-            variant: &'a Taml<'de>,
-            variant_accessed: &'a mut bool,
-        };
+        struct EnumVariantAccess<'a, 'de>(&'a Taml<'de>);
 
         impl<'a, 'de> de::EnumAccess<'de> for EnumVariantAccess<'a, 'de> {
             type Error = Error;
@@ -380,9 +379,8 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
             where
                 V: de::DeserializeSeed<'de>,
             {
-                *self.variant_accessed = true;
                 Ok((
-                    seed.deserialize(KeyDeserializer(match self.variant {
+                    seed.deserialize(KeyDeserializer(match self.0 {
                         Taml::StructuredVariant { variant, .. }
                         | Taml::TupleVariant { variant, .. }
                         | Taml::UnitVariant { variant } => variant,
@@ -397,10 +395,9 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
             type Error = Error;
 
             fn unit_variant(self) -> Result<()> {
-                *self.variant_accessed = true;
-                match self.variant {
+                match self.0 {
                     Taml::UnitVariant { .. } => Ok(()),
-                    _ => Err(invalid_type(self.variant, &"unit variant")),
+                    _ => Err(invalid_type(self.0, &"unit variant")),
                 }
             }
 
@@ -408,25 +405,30 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
             where
                 T: de::DeserializeSeed<'de>,
             {
-                *self.variant_accessed = true;
-                match self.variant {
+                match self.0 {
                     Taml::TupleVariant { values, .. } if values.len() == 1 => {
                         seed.deserialize(Deserializer(&values[0]))
                     }
-                    _ => Err(invalid_type(self.variant, &"newtype variant")),
+                    Taml::TupleVariant { values, .. } => Err(de::Error::invalid_length(
+                        values.len(),
+                        &"tuple variant of length 1",
+                    )),
+                    _ => Err(invalid_type(self.0, &"tuple variant of length 1")),
                 }
             }
 
-            fn tuple_variant<V>(self, _len: usize, visitor: V) -> Result<V::Value>
+            fn tuple_variant<V>(self, len: usize, visitor: V) -> Result<V::Value>
             where
                 V: de::Visitor<'de>,
             {
-                *self.variant_accessed = true;
-                match self.variant {
-                    Taml::TupleVariant { values, .. } => {
+                match self.0 {
+                    Taml::TupleVariant { values, .. } if values.len() == len => {
                         de::Deserializer::deserialize_seq(ListDeserializer(values), visitor)
                     }
-                    _ => Err(invalid_type(self.variant, &visitor)),
+                    Taml::TupleVariant { values, .. } => {
+                        Err(de::Error::invalid_length(values.len(), &visitor))
+                    }
+                    _ => Err(invalid_type(self.0, &visitor)),
                 }
             }
 
@@ -438,12 +440,11 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
             where
                 V: de::Visitor<'de>,
             {
-                *self.variant_accessed = true;
-                match self.variant {
+                match self.0 {
                     Taml::StructuredVariant { fields, .. } => {
                         de::Deserializer::deserialize_map(MapDeserializer(fields), visitor)
                     }
-                    _ => Err(invalid_type(self.variant, &visitor)),
+                    _ => Err(invalid_type(self.0, &visitor)),
                 }
             }
         }
@@ -451,20 +452,7 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
         match self.0 {
             Taml::StructuredVariant { variant, .. }
             | Taml::TupleVariant { variant, .. }
-            | Taml::UnitVariant { variant } => {
-                let mut variant_accessed = false;
-                let result = visitor.visit_enum(EnumVariantAccess {
-                    variant: self.0,
-                    variant_accessed: &mut variant_accessed,
-                });
-                if (!variant_accessed)
-                    && !matches!(self.0, Taml::TupleVariant{ values, ..} if values.is_empty())
-                {
-                    return Err(invalid_type(self.0, &"empty tuple variant"));
-                }
-
-                result
-            }
+            | Taml::UnitVariant { variant } => visitor.visit_enum(EnumVariantAccess(self.0)),
             _ => Err(invalid_type(self.0, &visitor)),
         }
     }
@@ -574,6 +562,13 @@ impl<'a, 'de> de::Deserializer<'de> for ListDeserializer<'a, 'de> {
                     .next()
                     .map(|t| seed.deserialize(Deserializer(t)))
                     .transpose()
+            }
+
+            fn size_hint(&self) -> Option<usize> {
+                match self.0.size_hint() {
+                    (min, Some(max)) if min == max => Some(min),
+                    _ => None,
+                }
             }
         }
 
