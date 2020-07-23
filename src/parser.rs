@@ -1,14 +1,101 @@
 //TODO: This entire file needs to have its types simplified.
 
 use {
-    crate::token::Token,
+    crate::token::Token as lexerToken,
+    enum_properties::enum_properties,
+    smallvec::{smallvec, SmallVec},
     smartstring::alias::String,
     std::{
         collections::{hash_map, HashMap},
+        fmt::Display,
         iter::{FromIterator, Peekable},
+        ops::Range,
     },
     woc::Woc,
 };
+
+trait IntoToken<'a, Position> {
+    fn into_token(self) -> Token<'a, Position>;
+}
+
+struct Token<'a, Position> {
+    token: lexerToken<'a>,
+    span: Range<Position>,
+}
+
+impl<'a> IntoToken<'a, ()> for lexerToken<'a> {
+    fn into_token(self) -> Token<'a, ()> {
+        Token {
+            token: self,
+            span: ()..(),
+        }
+    }
+}
+
+impl<'a, Position> IntoToken<'a, Position> for (lexerToken<'a>, Range<Position>) {
+    fn into_token(self) -> Token<'a, Position> {
+        Token {
+            token: self.0,
+            span: self.1,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum DiagnosticLevel {
+    Warning,
+    Error,
+}
+
+pub struct DiagnosticTypeProperties {
+    level: DiagnosticLevel,
+    code: usize,
+    title: &'static str,
+}
+
+enum_properties! {
+    #[derive(Clone, Copy, Debug)]
+    #[non_exhaustive]
+    pub enum DiagnosticType: DiagnosticTypeProperties {
+        HeadingTooDeep {
+            code: 1,
+            level: DiagnosticLevel::Error,
+            title: "Heading too deep",
+        },
+
+        SubsectionInTabularSection {
+            code: 2,
+            level: DiagnosticLevel::Error,
+            title: "Subsection in tabular section",
+        },
+
+        MissingVariantIdentifier {
+            code: 3,
+            level: DiagnosticLevel::Error,
+            title: "Missing variant identifier",
+        }
+    }
+}
+
+impl Display for DiagnosticType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "TAML{:04} {}", self.code, self.title)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct DiagnosticLabel<Position> {
+    caption: Option<&'static str>,
+    span: Option<Range<Position>>,
+}
+
+#[derive(Debug, Clone)]
+struct Diagnostic<Position> {
+    r#type: DiagnosticType,
+    labels: Vec<DiagnosticLabel<Position>>,
+}
+
+type Diagnostics<Position> = SmallVec<[Diagnostic<Position>; 0]>;
 
 //TODO: Implement specific errors and Display.
 #[derive(Debug)]
@@ -148,46 +235,79 @@ impl<'a> TabularPathSegment<'a> {
     }
 }
 
-impl<'a> FromIterator<Token<'a>> for Result<Map<'a>, Expected> {
-    fn from_iter<T: IntoIterator<Item = Token<'a>>>(iter: T) -> Self {
+//TODO: Public API.
+
+impl<'a, Position> FromIterator<Token<'a, Position>>
+    for (Result<Map<'a>, ()>, Diagnostics<Position>)
+{
+    fn from_iter<I: IntoIterator<Item = Token<'a, Position>>>(iter: I) -> Self {
         let mut iter = iter.into_iter().peekable();
 
         let mut taml = Map::new();
+        let mut diagnostics = smallvec![];
 
         let mut path = vec![];
 
         let mut selection = &mut taml;
 
-        while let Some(next) = iter.peek() {
+        while let Some(next) = iter.peek().map(|t| t.token) {
             match next {
-                Token::Comment(_) => assert!(matches!(iter.next().unwrap(), Token::Comment(_))),
-                Token::HeadingHashes(_) => {
-                    let depth = match iter.next().unwrap() {
-                        Token::HeadingHashes(count) => count,
+                lexerToken::Comment(_) => {
+                    assert!(matches!(iter.next().unwrap().token, lexerToken::Comment(_)))
+                }
+                lexerToken::HeadingHashes(_) => {
+                    let (depth, hashes_span) = match iter.next().unwrap() {
+                        Token {
+                            token: lexerToken::HeadingHashes(count),
+                            span,
+                        } => (count, span),
                         _ => unreachable!(),
                     };
 
                     path.truncate(depth - 1);
                     if path.len() != depth - 1 {
-                        return Err(Expected::Unspecific);
+                        diagnostics.push(Diagnostic {
+                            r#type: DiagnosticType::HeadingTooDeep,
+                            labels: vec![
+                                DiagnosticLabel {
+                                    caption: "This heading is nested more than one level deeper than the previous one.".into(),
+                                    span: hashes_span.into(),
+                                }
+                            ],
+                        });
+                        return (Err(()), diagnostics);
                     }
+
                     if path
                         .last()
                         .and_then(|s: &PathSegment| s.tabular.as_ref())
                         .is_some()
                     {
-                        return Err(Expected::Unspecific);
+                        diagnostics.push(Diagnostic {
+                            r#type: DiagnosticType::SubsectionInTabularSection,
+                            labels: vec![
+                                DiagnosticLabel {
+                                    caption: "This heading is nested inside a tabular section, which is not supported.".into(),
+                                    span: hashes_span.into(),
+                                }
+                            ],
+                        });
+                        return (Err(()), diagnostics);
                     }
 
-                    let new_segment = parse_path_segment(&mut iter)?;
+                    let new_segment = match parse_path_segment(&mut iter, &mut diagnostics) {
+                        Ok(new_segment) => new_segment,
+                        Err(()) => return (Err(()), diagnostics),
+                    };
 
-                    selection = instantiate(
-                        get_last_mut(&mut taml, path.iter())
-                            .map_err(|()| Expected::Unspecific)?
-                            .ok_or(Expected::Unspecific)?,
-                        new_segment.base.iter().cloned(),
-                    )
-                    .map_err(|()| Expected::Unspecific)?;
+                    selection = match get_last_mut(&mut taml, path.iter())
+                        .and_then(|selection| selection.ok_or(()))
+                        .and_then(|selection| {
+                            instantiate(selection, new_segment.base.iter().cloned())
+                        }) {
+                        Ok(selection) => selection,
+                        Err(()) => return (Err(()), diagnostics),
+                    };
 
                     if let Some(tabular) = new_segment.tabular.as_ref() {
                         // Create lists for empty headings too.
@@ -241,14 +361,15 @@ impl<'a> FromIterator<Token<'a>> for Result<Map<'a>, Expected> {
     }
 }
 
-fn parse_path_segment<'a, 'b, 'c>(
-    iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
-) -> Result<PathSegment<'a>, Expected> {
+fn parse_path_segment<'a, 'b, 'c, Position>(
+    iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
+    diagnostics: &mut Diagnostics<Position>,
+) -> Result<PathSegment<'a>, ()> {
     let mut base = vec![];
     let mut tabular = None;
 
-    if let Some(next) = iter.peek() {
-        if matches!(next, Token::Comment(_) | Token::Newline) {
+    if let Some(next) = iter.peek().map(|t| t.token) {
+        if matches!(next, lexerToken::Comment(_) | lexerToken::Newline) {
             return Ok(PathSegment { base, tabular });
         }
     }
@@ -257,16 +378,29 @@ fn parse_path_segment<'a, 'b, 'c>(
     loop {
         match iter.peek() {
             None => break,
-            Some(Token::Identifier(_)) => match iter.next().unwrap() {
-                Token::Identifier(str) => base.push(BasicPathElement {
+            Some(Token{token:lexerToken::Identifier(_),..}) => match iter.next().unwrap() {
+                Token {
+                    token: lexerToken::Identifier(str),
+                    ..
+                } => base.push(BasicPathElement {
                     key: BasicPathElementKey::Plain(str),
-                    variant: if iter.peek() == Some(&Token::Colon) {
-                        assert_eq!(iter.next().unwrap(), Token::Colon);
-                        if !matches!(iter.peek(), Some(Token::Identifier(_))) {
-                            return Err(Expected::StructuredEnumVariantIdentifier);
+                    variant: if iter.peek().map(|t| &t.token) == Some(&lexerToken::Colon) {
+                        assert_eq!(iter.next().unwrap().token, lexerToken::Colon);
+                        if !matches!(
+                            iter.peek().map(|t| t.token),
+                            Some(lexerToken::Identifier(_))
+                        ) {
+                            diagnostics.push(Diagnostic {
+                                r#type: DiagnosticType::MissingVariantIdentifier,
+                                labels: vec![DiagnosticLabel {
+                                    caption: "Colons in (non-tabular) paths must be followed by a variant identifier (for a structured enum).".into(),
+                                    span: iter.peek().map(|t| t.span),
+                                }],
+                            });
+                            return Err(());
                         }
-                        match iter.next().unwrap() {
-                            Token::Identifier(str) => Some(str),
+                        match iter.next().unwrap().token {
+                            lexerToken::Identifier(str) => Some(str),
                             _ => unreachable!(),
                         }
                     } else {
@@ -328,8 +462,8 @@ fn parse_path_segment<'a, 'b, 'c>(
     Ok(PathSegment { base, tabular })
 }
 
-fn parse_tabular_path_segments<'a>(
-    iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
+fn parse_tabular_path_segments<'a, Position>(
+    iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 ) -> Result<Vec<TabularPathSegment<'a>>, Expected> {
     let mut segments = vec![];
     while !matches!(
@@ -346,8 +480,8 @@ fn parse_tabular_path_segments<'a>(
     Ok(segments)
 }
 
-fn parse_tabular_path_segment<'a>(
-    iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
+fn parse_tabular_path_segment<'a, Position>(
+    iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 ) -> Result<TabularPathSegment<'a>, Expected> {
     let mut base = vec![];
     let mut multi = None;
@@ -530,8 +664,8 @@ fn instantiate<'a, 'b>(
     Ok(selection)
 }
 
-fn parse_key_value_pair<'a>(
-    iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
+fn parse_key_value_pair<'a, Position>(
+    iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 ) -> Result<Option<(Key<'a>, Taml<'a>)>, Expected> {
     Ok(match iter.peek().ok_or(Expected::Unspecific)? {
         Token::HeadingHashes(_)
@@ -554,8 +688,8 @@ fn parse_key_value_pair<'a>(
     })
 }
 
-fn parse_values_line<'a>(
-    iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
+fn parse_values_line<'a, Position>(
+    iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
     count: usize,
 ) -> Result<Vec<Taml<'a>>, Expected> {
     let mut values = vec![];
@@ -574,8 +708,8 @@ fn parse_values_line<'a>(
     Ok(values)
 }
 
-fn parse_value<'a>(
-    iter: &mut Peekable<impl Iterator<Item = Token<'a>>>,
+fn parse_value<'a, Position>(
+    iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 ) -> Result<Option<Taml<'a>>, Expected> {
     Ok(match iter.peek().ok_or(Expected::Unspecific)? {
         Token::HeadingHashes(_) => None,

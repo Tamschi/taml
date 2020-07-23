@@ -13,3 +13,12 @@ first-interval-no-min: true
 interval-range: (10, 60)
 volume-range: (0.1, 0.15)
 `spaced \` identifier`: "asdhasd kjhdajkh"
+
+# [enums]: Structured
+field_1: true
+field_2: false
+
+# [[enums]]
+Tuple(1, 2, 3)
+Unit
+EmptyTuple()
