@@ -79,6 +79,24 @@ enum_properties! {
             code: 4,
             level: DiagnosticLevel::Error,
             title: "Expected key-value pair",
+        },
+
+        ExpectedValue {
+            code: 5,
+            level: DiagnosticLevel::Error,
+            title: "Expected value",
+        },
+
+        UnclosedList {
+            code: 6,
+            level: DiagnosticLevel::Error,
+            title: "Unclosed list",
+        },
+
+        ValuesLineTooShort {
+            code: 7,
+            level: DiagnosticLevel::Error,
+            title: "Values line too short",
         }
     }
 }
@@ -89,10 +107,31 @@ impl Display for DiagnosticType {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum DiagnosticLabelPriority {
+    Primary,
+    Auxiliary,
+}
+
 #[derive(Debug, Clone)]
-struct DiagnosticLabel<Position> {
+pub struct DiagnosticLabel<Position> {
     caption: Option<&'static str>,
     span: Option<Range<Position>>,
+    priority: DiagnosticLabelPriority,
+}
+
+impl<Position> DiagnosticLabel<Position> {
+    pub fn new(
+        caption: impl Into<Option<&'static str>>,
+        span: impl Into<Option<Range<Position>>>,
+        priority: DiagnosticLabelPriority,
+    ) -> Self {
+        Self {
+            caption: caption.into(),
+            span: span.into(),
+            priority,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -101,7 +140,7 @@ struct Diagnostic<Position> {
     labels: Vec<DiagnosticLabel<Position>>,
 }
 
-type Diagnostics<Position> = SmallVec<[Diagnostic<Position>; 0]>;
+pub type Diagnostics<Position> = SmallVec<[Diagnostic<Position>; 0]>;
 
 //TODO: Implement specific errors and Display.
 #[derive(Debug)]
@@ -275,10 +314,11 @@ impl<'a, Position> FromIterator<Token<'a, Position>>
                         diagnostics.push(Diagnostic {
                             r#type: DiagnosticType::HeadingTooDeep,
                             labels: vec![
-                                DiagnosticLabel {
-                                    caption: "This heading is nested more than one level deeper than the previous one.".into(),
-                                    span: hashes_span.into(),
-                                }
+                                DiagnosticLabel::new(
+                                    "This heading is nested more than one level deeper than the previous one.",
+                                    hashes_span,
+                                    DiagnosticLabelPriority::Primary,
+                                )
                             ],
                         });
                         return (Err(()), diagnostics);
@@ -292,10 +332,11 @@ impl<'a, Position> FromIterator<Token<'a, Position>>
                         diagnostics.push(Diagnostic {
                             r#type: DiagnosticType::SubsectionInTabularSection,
                             labels: vec![
-                                DiagnosticLabel {
-                                    caption: "This heading is nested inside a tabular section, which is not supported.".into(),
-                                    span: hashes_span.into(),
-                                }
+                                DiagnosticLabel::new(
+                                    "This heading is nested inside a tabular section, which is not supported.",
+                                    hashes_span,
+                                    DiagnosticLabelPriority::Primary,
+                                )
                             ],
                         });
                         return (Err(()), diagnostics);
@@ -398,10 +439,11 @@ fn parse_path_segment<'a, 'b, 'c, Position>(
                         ) {
                             diagnostics.push(Diagnostic {
                                 r#type: DiagnosticType::MissingVariantIdentifier,
-                                labels: vec![DiagnosticLabel {
-                                    caption: "Colons in (non-tabular) paths must be followed by a variant identifier (for a structured enum).".into(),
-                                    span: iter.peek().map(|t| t.span),
-                                }],
+                                labels: vec![DiagnosticLabel::new(
+                                    "Colons in (non-tabular) paths must be followed by a variant identifier (for a structured enum).",
+                                    iter.peek().map(|t| t.span),
+                                    DiagnosticLabelPriority::Primary,
+                                )],
                             });
                             return Err(());
                         }
@@ -691,10 +733,11 @@ fn parse_key_value_pair<'a, Position>(
                 } else {
                     diagnostics.push(Diagnostic {
                         r#type: DiagnosticType::ExpectedKeyValuePair,
-                        labels: vec![DiagnosticLabel {
-                            caption: "Expected colon".into(),
-                            span: iter.peek().map(|t| t.span),
-                        }],
+                        labels: vec![DiagnosticLabel::new(
+                            "Expected colon.",
+                            iter.peek().map(|t| t.span.start..t.span.start),
+                            DiagnosticLabelPriority::Primary,
+                        )],
                     });
                     return Err(());
                 }
@@ -706,10 +749,11 @@ fn parse_key_value_pair<'a, Position>(
         _ => {
             diagnostics.push(Diagnostic {
                 r#type: DiagnosticType::ExpectedKeyValuePair,
-                labels: vec![DiagnosticLabel {
-                    caption: "Structured sections can only contain subsections and key-value pairs.\nKey-value pairs must start with an identifier.".into(),
-                    span: iter.peek().map(|t| t.span),
-                }],
+                labels: vec![DiagnosticLabel ::new(
+                    "Structured sections can only contain subsections and key-value pairs.\nKey-value pairs must start with an identifier.",
+                    iter.peek().map(|t| t.span),
+                    DiagnosticLabelPriority::Primary,
+                )],
             });
             return Err(());
         }
@@ -719,19 +763,28 @@ fn parse_key_value_pair<'a, Position>(
 fn parse_values_line<'a, Position>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
     count: usize,
-) -> Result<Vec<Taml<'a>>, Expected> {
+    diagnostics: &mut Diagnostics<Position>,
+) -> Result<Vec<Taml<'a>>, ()> {
     let mut values = vec![];
-    values.push(parse_value(iter)?.ok_or(Expected::Unspecific)?);
+    values.push(parse_value(iter, diagnostics)?);
     for _ in 1..count {
-        if iter.peek() == Some(&Token::Comma) {
-            assert_eq!(iter.next().unwrap(), Token::Comma);
-            values.push(parse_value(iter)?.ok_or(Expected::Unspecific)?)
+        if iter.peek().map(|t| &t.token) == Some(&lexerToken::Comma) {
+            assert_eq!(iter.next().unwrap().token, lexerToken::Comma);
+            values.push(parse_value(iter, diagnostics)?)
         } else {
-            return Err(Expected::Unspecific);
+            diagnostics.push(Diagnostic {
+                r#type: DiagnosticType::ValuesLineTooShort,
+                labels: vec![DiagnosticLabel::new(
+                    "Expected comma here.",
+                    iter.peek().map(|t| t.span.start..t.span.start),
+                    DiagnosticLabelPriority::Primary,
+                )],
+            });
+            return Err(());
         }
     }
-    if iter.peek() == Some(&Token::Comma) {
-        assert_eq!(iter.next().unwrap(), Token::Comma);
+    if iter.peek().map(|t| &t.token) == Some(&lexerToken::Comma) {
+        assert_eq!(iter.next().unwrap().token, lexerToken::Comma);
     }
     Ok(values)
 }
@@ -740,26 +793,60 @@ fn parse_value<'a, Position>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
     diagnostics: &mut Diagnostics<Position>,
 ) -> Result<Taml<'a>, ()> {
-    Ok(match iter.peek().ok_or(Expected::Unspecific)? {
-        lexerToken::Paren
-        | lexerToken::String(_)
-        | lexerToken::Float(_)
-        | lexerToken::Integer(_)
-        | lexerToken::Identifier(_) => match iter.next().unwrap() {
+    fn err<'a, Position>(
+        span: impl Into<Option<Range<Position>>>,
+        diagnostics: &mut Diagnostics<Position>,
+    ) -> Result<Taml<'a>, ()> {
+        diagnostics.push(Diagnostic {
+            r#type: DiagnosticType::ExpectedValue,
+            labels: vec![DiagnosticLabel::new(
+                None,
+                span,
+                DiagnosticLabelPriority::Primary,
+            )],
+        });
+        Err(())
+    }
+
+    if let Some(Token { token, span }) = iter.next() {
+        Ok(match token {
             lexerToken::Paren => {
                 let mut items = vec![];
-                while iter.peek().ok_or(Expected::Unspecific)? != &Token::Thesis {
-                    items.push(parse_value(iter)?.ok_or(Expected::Unspecific)?);
-                    match iter.peek() {
-                        Some(Token::Comma) => assert_eq!(iter.next().unwrap(), Token::Comma),
+                while iter.peek().map(|t| &t.token) != Some(&lexerToken::Thesis) {
+                    if matches!(iter.peek().map(|t| &t.token), None| Some(&lexerToken::Comment(_))| Some(&lexerToken::Newline))
+                    {
+                        // Defer to unclosed list error.
+                        break;
+                    }
+
+                    items.push(parse_value(iter, diagnostics)?);
+                    match iter.peek().map(|t| t.token) {
+                        Some(lexerToken::Comma) => {
+                            assert_eq!(iter.next().unwrap().token, lexerToken::Comma)
+                        }
                         _ => break,
                     }
                 }
-                if iter.peek() == Some(&Token::Thesis) {
-                    assert_eq!(iter.next().unwrap(), Token::Thesis);
+                if iter.peek().map(|t| &t.token) == Some(&lexerToken::Thesis) {
+                    assert_eq!(iter.next().unwrap().token, lexerToken::Thesis);
                     Taml::List(items)
                 } else {
-                    return Err(Expected::Unspecific);
+                    diagnostics.push(Diagnostic {
+                        r#type: DiagnosticType::UnclosedList,
+                        labels: vec![
+                            DiagnosticLabel::new(
+                                "This list starts here...",
+                                span,
+                                DiagnosticLabelPriority::Auxiliary,
+                            ),
+                            DiagnosticLabel::new(
+                                "...but is unclosed at this point.",
+                                iter.peek().map(|t| t.span.start..t.span.start),
+                                DiagnosticLabelPriority::Primary,
+                            ),
+                        ],
+                    });
+                    return Err(());
                 }
             }
 
@@ -767,8 +854,8 @@ fn parse_value<'a, Position>(
             lexerToken::Float(str) => Taml::Float(str),
             lexerToken::Integer(str) => Taml::Integer(str),
             lexerToken::Identifier(str) => {
-                if iter.peek() == Some(&Token::Paren) {
-                    match parse_value(iter)?.ok_or(Expected::Unspecific)? {
+                if iter.peek().map(|t| &t.token) == Some(&lexerToken::Paren) {
+                    match parse_value(iter, diagnostics)? {
                         Taml::List(list) => Taml::TupleVariant {
                             variant: str,
                             values: list,
@@ -780,9 +867,9 @@ fn parse_value<'a, Position>(
                 }
             }
 
-            _ => unreachable!(),
-        },
-
-        _ => return Err(Expected::Unspecific),
-    })
+            _ => return err(span, diagnostics),
+        })
+    } else {
+        err(None, diagnostics)
+    }
 }

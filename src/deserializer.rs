@@ -1,6 +1,9 @@
 use crate::parser::{Key, List, ListIter, Map, MapIter};
 use {
-    crate::{parser::Taml, token::Token},
+    crate::{
+        parser::{Diagnostics, Taml},
+        token::Token,
+    },
     serde::de,
 };
 
@@ -19,7 +22,7 @@ pub fn from_str<T: de::DeserializeOwned>(str: &str) -> Result<T> {
 #[allow(clippy::missing_errors_doc)]
 pub fn from_tokens<'de, T: de::Deserialize<'de>>(
     tokens: impl IntoIterator<Item = Token<'de>>,
-) -> Result<T> {
+) -> (Result<T>, Diagnostics<()>) {
     //TODO: This seems overly explicit.
     use std::iter::FromIterator as _;
     let taml =
