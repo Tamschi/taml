@@ -400,11 +400,10 @@ impl<'a, Position> FromIterator<Token<'a, Position>>
                         Err(()) => return (Err(()), diagnostics),
                     };
 
-                    selection = match get_last_mut(&mut taml, path.iter())
-                        .and_then(|selection| selection.ok_or(()))
-                        .and_then(|selection| {
-                            instantiate(selection, new_segment.base.iter().cloned())
-                        }) {
+                    selection = match instantiate(
+                        get_last_mut(&mut taml, path.iter()),
+                        new_segment.base.iter().cloned(),
+                    ) {
                         Ok(selection) => selection,
                         Err(()) => return (Err(()), diagnostics),
                     };
@@ -665,7 +664,7 @@ fn parse_tabular_path_segment<'a, Position>(
 fn get_last_mut<'a, 'b, 'c>(
     mut selected: &'a mut Map<'b>,
     path: impl IntoIterator<Item = &'c PathSegment<'b>>,
-) -> Result<Option<&'a mut Map<'b>>, ()>
+) -> &'a mut Map<'b>
 where
     'b: 'c,
 {
@@ -673,7 +672,7 @@ where
         match segment {
             PathSegment {
                 tabular: Some(_), ..
-            } => return Err(()),
+            } => unreachable!(),
             PathSegment {
                 base,
                 tabular: None,
@@ -685,8 +684,7 @@ where
 
                         BasicPathElementKey::List(key) => match map.get_mut(key.as_ref()) {
                             Some(Taml::List(selected)) => selected.last_mut(),
-                            Some(_) => return Err(()),
-                            None => return Ok(None),
+                            _ => unreachable!(),
                         },
                     };
 
@@ -699,15 +697,14 @@ where
                             }),
                             Some(expected_variant),
                         ) if existing_variant.as_ref() == expected_variant.as_ref() => fields,
-                        (Some(_), _) => return Err(()),
-                        (None, _) => return Ok(None),
+                        _ => unreachable!(),
                     };
                 }
             }
         }
     }
 
-    Ok(Some(selected))
+    selected
 }
 
 fn instantiate<'a, 'b>(
