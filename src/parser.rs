@@ -47,9 +47,22 @@ enum DiagnosticLevel {
     Error,
 }
 
+struct DiagnosticGroupProperties {
+    code: char,
+}
+
+enum_properties! {
+    pub enum DiagnosticGroup: DiagnosticGroupProperties {
+        Lexing { code: 'L' },
+        Parsing { code: 'P' },
+        Deserialising{ code: 'D' },
+    }
+}
+
 pub struct DiagnosticTypeProperties {
-    level: DiagnosticLevel,
+    group: DiagnosticGroup,
     code: usize,
+    level: DiagnosticLevel,
     title: &'static str,
 }
 
@@ -57,43 +70,57 @@ enum_properties! {
     #[derive(Clone, Copy, Debug)]
     #[non_exhaustive]
     pub enum DiagnosticType: DiagnosticTypeProperties {
+        UnrecognizedToken {
+            group: DiagnosticGroup::Lexing,
+            code: 0,
+            level: DiagnosticLevel::Error,
+            title: "Unrecognised token",
+        },
+
         HeadingTooDeep {
+            group: DiagnosticGroup::Parsing,
             code: 1,
             level: DiagnosticLevel::Error,
             title: "Heading too deep",
         },
 
         SubsectionInTabularSection {
+            group: DiagnosticGroup::Parsing,
             code: 2,
             level: DiagnosticLevel::Error,
             title: "Subsection in tabular section",
         },
 
         MissingVariantIdentifier {
+            group: DiagnosticGroup::Parsing,
             code: 3,
             level: DiagnosticLevel::Error,
             title: "Missing variant identifier",
         },
 
         ExpectedKeyValuePair {
+            group: DiagnosticGroup::Parsing,
             code: 4,
             level: DiagnosticLevel::Error,
             title: "Expected key-value pair",
         },
 
         ExpectedValue {
+            group: DiagnosticGroup::Parsing,
             code: 5,
             level: DiagnosticLevel::Error,
             title: "Expected value",
         },
 
         UnclosedList {
+            group: DiagnosticGroup::Parsing,
             code: 6,
             level: DiagnosticLevel::Error,
             title: "Unclosed list",
         },
 
         ValuesLineTooShort {
+            group: DiagnosticGroup::Parsing,
             code: 7,
             level: DiagnosticLevel::Error,
             title: "Values line too short",
@@ -103,7 +130,7 @@ enum_properties! {
 
 impl Display for DiagnosticType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "TAML{:04} {}", self.code, self.title)
+        write!(f, "TAML-{}{:04} {}", self.group.code, self.code, self.title)
     }
 }
 
@@ -297,6 +324,14 @@ impl<'a, Position> FromIterator<Token<'a, Position>>
 
         while let Some(next) = iter.peek().map(|t| t.token) {
             match next {
+                lexerToken::Error => diagnostics.push(Diagnostic {
+                    r#type: DiagnosticType::UnrecognizedToken,
+                    labels: vec![DiagnosticLabel::new(
+                        None,
+                        iter.next().unwrap().span,
+                        DiagnosticLabelPriority::Primary,
+                    )],
+                }),
                 lexerToken::Comment(_) => {
                     assert!(matches!(iter.next().unwrap().token, lexerToken::Comment(_)))
                 }
