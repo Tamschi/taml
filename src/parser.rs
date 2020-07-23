@@ -73,6 +73,12 @@ enum_properties! {
             code: 3,
             level: DiagnosticLevel::Error,
             title: "Missing variant identifier",
+        },
+
+        ExpectedKeyValuePair {
+            code: 4,
+            level: DiagnosticLevel::Error,
+            title: "Expected key-value pair",
         }
     }
 }
@@ -666,25 +672,47 @@ fn instantiate<'a, 'b>(
 
 fn parse_key_value_pair<'a, Position>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
-) -> Result<Option<(Key<'a>, Taml<'a>)>, Expected> {
-    Ok(match iter.peek().ok_or(Expected::Unspecific)? {
-        Token::HeadingHashes(_)
-        | Token::Paren
-        | Token::String(_)
-        | Token::Float(_)
-        | Token::Integer(_) => None,
-
-        Token::Identifier(_) => Some(match iter.next().unwrap() {
-            Token::Identifier(key) => {
-                if iter.next().ok_or(Expected::Unspecific)? != Token::Colon {
-                    return Err(Expected::Unspecific);
+    diagnostics: &mut Diagnostics<Position>,
+) -> Result<(Key<'a>, Taml<'a>), ()> {
+    Ok(match iter.peek() {
+        Some(Token {
+            token: lexerToken::Identifier(_),
+            ..
+        }) => match iter.next().unwrap().token {
+            lexerToken::Identifier(key) => {
+                if matches!(
+                    iter.peek(),
+                    Some(&Token {
+                        token: lexerToken::Colon,
+                        ..
+                    })
+                ) {
+                    assert!(matches!(iter.next().unwrap(), Token{token:lexerToken::Colon,..}))
+                } else {
+                    diagnostics.push(Diagnostic {
+                        r#type: DiagnosticType::ExpectedKeyValuePair,
+                        labels: vec![DiagnosticLabel {
+                            caption: "Expected colon".into(),
+                            span: iter.peek().map(|t| t.span),
+                        }],
+                    });
+                    return Err(());
                 }
-                (key, parse_value(iter)?.ok_or(Expected::Unspecific)?)
+                (key, parse_value(iter, diagnostics)?)
             }
             _ => unreachable!(),
-        }),
+        },
 
-        _ => return Err(Expected::Unspecific),
+        _ => {
+            diagnostics.push(Diagnostic {
+                r#type: DiagnosticType::ExpectedKeyValuePair,
+                labels: vec![DiagnosticLabel {
+                    caption: "Structured sections can only contain subsections and key-value pairs.\nKey-value pairs must start with an identifier.".into(),
+                    span: iter.peek().map(|t| t.span),
+                }],
+            });
+            return Err(());
+        }
     })
 }
 
@@ -710,16 +738,15 @@ fn parse_values_line<'a, Position>(
 
 fn parse_value<'a, Position>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
-) -> Result<Option<Taml<'a>>, Expected> {
+    diagnostics: &mut Diagnostics<Position>,
+) -> Result<Taml<'a>, ()> {
     Ok(match iter.peek().ok_or(Expected::Unspecific)? {
-        Token::HeadingHashes(_) => None,
-
-        Token::Paren
-        | Token::String(_)
-        | Token::Float(_)
-        | Token::Integer(_)
-        | Token::Identifier(_) => Some(match iter.next().unwrap() {
-            Token::Paren => {
+        lexerToken::Paren
+        | lexerToken::String(_)
+        | lexerToken::Float(_)
+        | lexerToken::Integer(_)
+        | lexerToken::Identifier(_) => match iter.next().unwrap() {
+            lexerToken::Paren => {
                 let mut items = vec![];
                 while iter.peek().ok_or(Expected::Unspecific)? != &Token::Thesis {
                     items.push(parse_value(iter)?.ok_or(Expected::Unspecific)?);
@@ -736,10 +763,10 @@ fn parse_value<'a, Position>(
                 }
             }
 
-            Token::String(str) => Taml::String(str),
-            Token::Float(str) => Taml::Float(str),
-            Token::Integer(str) => Taml::Integer(str),
-            Token::Identifier(str) => {
+            lexerToken::String(str) => Taml::String(str),
+            lexerToken::Float(str) => Taml::Float(str),
+            lexerToken::Integer(str) => Taml::Integer(str),
+            lexerToken::Identifier(str) => {
                 if iter.peek() == Some(&Token::Paren) {
                     match parse_value(iter)?.ok_or(Expected::Unspecific)? {
                         Taml::List(list) => Taml::TupleVariant {
@@ -754,7 +781,7 @@ fn parse_value<'a, Position>(
             }
 
             _ => unreachable!(),
-        }),
+        },
 
         _ => return Err(Expected::Unspecific),
     })
