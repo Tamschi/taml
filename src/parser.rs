@@ -8,7 +8,7 @@ use {
     std::{
         collections::{hash_map, HashMap},
         fmt::Display,
-        iter::{FromIterator, Peekable},
+        iter::{self, FromIterator, Peekable},
         ops::Range,
     },
     woc::Woc,
@@ -324,14 +324,32 @@ impl<'a, Position> FromIterator<Token<'a, Position>>
 
         while let Some(next) = iter.peek().map(|t| t.token) {
             match next {
-                lexerToken::Error => diagnostics.push(Diagnostic {
-                    r#type: DiagnosticType::UnrecognizedToken,
-                    labels: vec![DiagnosticLabel::new(
-                        None,
-                        iter.next().unwrap().span,
-                        DiagnosticLabelPriority::Primary,
-                    )],
-                }),
+                lexerToken::Error => {
+                    // Stop parsing but collect all the tokenizer diagnostics.
+                    diagnostics.extend(
+                        iter::once(iter.next().unwrap().span)
+                            .chain(iter.filter_map(|t| {
+                                if let Token {
+                                    token: lexerToken::Error,
+                                    span,
+                                } = t
+                                {
+                                    Some(span)
+                                } else {
+                                    None
+                                }
+                            }))
+                            .map(|span| Diagnostic {
+                                r#type: DiagnosticType::UnrecognizedToken,
+                                labels: vec![DiagnosticLabel::new(
+                                    None,
+                                    span,
+                                    DiagnosticLabelPriority::Primary,
+                                )],
+                            }),
+                    );
+                    return (Err(()), diagnostics);
+                }
                 lexerToken::Comment(_) => {
                     assert!(matches!(iter.next().unwrap().token, lexerToken::Comment(_)))
                 }
