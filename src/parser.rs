@@ -146,6 +146,13 @@ enum_properties! {
             level: DiagnosticLevel::Error,
             title: "Unclosed tabular path multi segment",
         },
+
+        ExpectedPathSegment {
+            group: DiagnosticGroup::Parsing,
+            code: 11,
+            level: DiagnosticLevel::Error,
+            title: "Expected path segment",
+        },
     }
 }
 
@@ -437,28 +444,33 @@ impl<'a, Position> FromIterator<Token<'a, Position>>
 
                     path.push(new_segment);
                 }
-                Token::Newline => assert_eq!(iter.next().unwrap(), Token::Newline),
+                lexerToken::Newline => assert_eq!(iter.next().unwrap().token, lexerToken::Newline),
                 _ =>
                 {
                     #[allow(clippy::single_match_else)]
                     match path.last().and_then(|s| s.tabular.as_ref()) {
                         Some(tabular) => {
                             let n = tabular.arity();
-                            let mut values = parse_values_line(&mut iter, n)?;
+                            let mut values = match parse_values_line(&mut iter, n, &mut diagnostics)
+                            {
+                                Ok(values) => values,
+                                Err(()) => return (Err(()), diagnostics),
+                            };
 
-                            tabular
-                                .assign(selection, &mut values.drain(..))
-                                .map_err(|()| Expected::Unspecific)?;
+                            if let Err(()) = tabular.assign(selection, &mut values.drain(..)) {
+                                return (Err(()), diagnostics);
+                            };
 
-                            if !values.is_empty() {
-                                return Err(Expected::Unspecific);
-                            }
+                            assert!(values.is_empty());
                         }
                         None => {
-                            let kv =
-                                parse_key_value_pair(&mut iter)?.ok_or(Expected::Unspecific)?;
-                            if let hash_map::Entry::Vacant(vacant) = selection.entry(kv.0) {
-                                vacant.insert(kv.1);
+                            let (key, value) =
+                                match parse_key_value_pair(&mut iter, &mut diagnostics) {
+                                    Ok(kv) => kv,
+                                    Err(()) => return (Err(()), diagnostics),
+                                };
+                            if let hash_map::Entry::Vacant(vacant) = selection.entry(key) {
+                                vacant.insert(value);
                             } else {
                                 return Err(Expected::Unspecific);
                             }
@@ -487,13 +499,10 @@ fn parse_path_segment<'a, 'b, 'c, Position>(
 
     //TODO: Deduplicate the code here.
     loop {
-        match iter.peek() {
+        match iter.peek().map(|t| t.token) {
             None => break,
-            Some(Token{token:lexerToken::Identifier(_),..}) => match iter.next().unwrap() {
-                Token {
-                    token: lexerToken::Identifier(str),
-                    ..
-                } => base.push(BasicPathElement {
+            Some(lexerToken::Identifier(_)) => match iter.next().unwrap().token {
+                 lexerToken::Identifier(str)=> base.push(BasicPathElement {
                     key: BasicPathElementKey::Plain(str),
                     variant: if iter.peek().map(|t| &t.token) == Some(&lexerToken::Colon) {
                         assert_eq!(iter.next().unwrap().token, lexerToken::Colon);
@@ -521,24 +530,25 @@ fn parse_path_segment<'a, 'b, 'c, Position>(
                 }),
                 _ => unreachable!(),
             },
-            Some(Token::Brac) => {
-                assert_eq!(iter.next().unwrap(), Token::Brac);
-                match iter.peek().ok_or(Expected::Unspecific)? {
-                    Token::Identifier(_) => match iter.next().unwrap() {
-                        Token::Identifier(str) => {
+            Some(lexerToken::Brac) => {
+                assert_eq!(iter.next().unwrap().token, lexerToken::Brac);
+                match iter.peek().map(|t| t.token) {
+                    Some(lexerToken::Identifier(_)) => match iter.next().unwrap().token {
+                        lexerToken::Identifier(str) => {
                             match iter.peek() {
-                                Some(Token::Ket) => assert_eq!(iter.next().unwrap(), Token::Ket),
+                                Some(lexerToken::Ket) => assert_eq!(iter.next().unwrap(), Token::Ket),
                                 _ => return Err(Expected::Unspecific),
                             }
                             base.push(BasicPathElement {
                                 key: BasicPathElementKey::List(str),
-                                variant: if iter.peek() == Some(&Token::Colon) {
-                                    assert_eq!(iter.next().unwrap(), Token::Colon);
-                                    if !matches!(iter.peek(), Some(Token::Identifier(_))) {
-                                        return Err(Expected::StructuredEnumVariantIdentifier);
+                                variant: if iter.peek().map(|t| &t.token) == Some(&lexerToken::Colon) {
+                                    assert_eq!(iter.next().unwrap().token, lexerToken::Colon);
+                                    if !matches!(iter.peek().map(|t| t.token), Some(lexerToken::Identifier(_))) {
+                                        diagnostics.push(Diagnostic{r#type: DiagnosticType::MissingVariantIdentifier, labels: vec![DiagnosticLabel::new("Colons in headings must be followed by an identifier.", iter.peek().map(|t| t.span), DiagnosticLabelPriority::Primary)]});
+                                        return Err(());
                                     }
-                                    match iter.next().unwrap() {
-                                        Token::Identifier(str) => Some(str),
+                                    match iter.next().unwrap().token {
+                                        lexerToken::Identifier(str) => Some(str),
                                         _ => unreachable!(),
                                     }
                                 } else {
@@ -548,24 +558,28 @@ fn parse_path_segment<'a, 'b, 'c, Position>(
                         }
                         _ => unreachable!(),
                     },
-                    lexerToken::Brac => {
-                        tabular = Some(parse_tabular_path_segment(iter)?);
-                        match iter.peek() {
-                            Some(lexerToken::Ket) => assert_eq!(iter.next().unwrap(), lexerToken::Ket),
+                    Some(lexerToken::Brac) => {
+                        tabular = Some(parse_tabular_path_segment(iter, diagnostics)?);
+                        match iter.peek().map(|t| t.token) {
+                            Some(lexerToken::Ket) => assert_eq!(iter.next().unwrap().token, lexerToken::Ket),
                             _ => return Err(Expected::Unspecific),
                         }
                     }
-                    _ => return Err(Expected::Unspecific),
+                    _ => {
+                        diagnostics.push(Diagnostic{r#type: DiagnosticType::ExpectedPathSegment, labels: vec![DiagnosticLabel::new("Expected [ or an identifier here.", iter.peek().map(|t| t.span), DiagnosticLabelPriority::Primary)]});return Err(())},
                 }
             }
-            Some(_) => return Err(Expected::Unspecific),
+            Some(_) =>{
+                diagnostics.push(Diagnostic{r#type: DiagnosticType::ExpectedPathSegment, labels: vec![DiagnosticLabel::new("Expected [ or an identifier here.", iter.peek().map(|t| t.span), DiagnosticLabelPriority::Primary)]});
+                return Err(());
+            } 
         }
 
         if tabular.is_some() {
             break;
         }
         match iter.peek().map(|t| t.token) {
-            Some(lexerToken::Newline) => break,
+            Some(lexerToken::Newline) | Some(lexerToken::Comment(_)) => break,
             Some(lexerToken::Period) => assert_eq!(iter.next().unwrap().token, lexerToken::Period),
             _ => return Err(Expected::Unspecific),
         }
