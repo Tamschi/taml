@@ -169,15 +169,6 @@ struct Diagnostic<Position> {
 
 pub type Diagnostics<Position> = SmallVec<[Diagnostic<Position>; 0]>;
 
-//TODO: Implement specific errors and Display.
-#[derive(Debug)]
-#[non_exhaustive]
-pub enum Expected {
-    ValueAlreadyExistsInStructuredEnumTargetSlot,
-    StructuredEnumVariantIdentifier,
-    Unspecific,
-}
-
 #[derive(Debug)]
 pub enum Taml<'a> {
     String(Woc<'a, String, str>),
@@ -564,16 +555,16 @@ fn parse_path_segment<'a, 'b, 'c, Position>(
 
 fn parse_tabular_path_segments<'a, Position>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
-) -> Result<Vec<TabularPathSegment<'a>>, Expected> {
+) -> Result<Vec<TabularPathSegment<'a>>, ()> {
     let mut segments = vec![];
     while !matches!(
-        iter.peek().ok_or(Expected::Unspecific)?,
-        Token::Ce | Token::Ket
+        iter.peek().map(|t| t.token),
+        None | Some(lexerToken::Ce) | Some(lexerToken::Ket)
     ) {
         segments.push(parse_tabular_path_segment(iter)?);
 
-        match iter.peek() {
-            Some(Token::Comma) => assert_eq!(iter.next().unwrap(), Token::Comma),
+        match iter.peek().map(|t| t.token) {
+            Some(lexerToken::Comma) => assert_eq!(iter.next().unwrap().token, lexerToken::Comma),
             _ => break,
         }
     }
@@ -582,31 +573,31 @@ fn parse_tabular_path_segments<'a, Position>(
 
 fn parse_tabular_path_segment<'a, Position>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
-) -> Result<TabularPathSegment<'a>, Expected> {
+) -> Result<TabularPathSegment<'a>, ()> {
     let mut base = vec![];
     let mut multi = None;
     loop {
-        match iter.peek() {
-            Some(Token::Bra) => {
-                assert_eq!(iter.next().unwrap(), Token::Bra);
+        match iter.peek().map(|t| t.token) {
+            Some(lexerToken::Bra) => {
+                assert_eq!(iter.next().unwrap(), lexerToken::Bra);
                 multi = Some(parse_tabular_path_segments(iter)?);
                 match iter.peek() {
-                    Some(Token::Ce) => assert_eq!(iter.next().unwrap(), Token::Ce),
+                    Some(Token::Ce) => assert_eq!(iter.next().unwrap(), lexerToken::Ce),
                     _ => return Err(Expected::Unspecific),
                 }
             }
 
             //TODO: Deduplicate the code
-            Some(Token::Identifier(_)) => match iter.next().unwrap() {
-                Token::Identifier(str) => base.push(BasicPathElement {
+            Some(lexerToken::Identifier(_)) => match iter.next().unwrap() {
+                lexerToken::Identifier(str) => base.push(BasicPathElement {
                     key: BasicPathElementKey::Plain(str),
-                    variant: if iter.peek() == Some(&Token::Colon) {
-                        assert_eq!(iter.next().unwrap(), Token::Colon);
-                        if !matches!(iter.peek(), Some(Token::Identifier(_))) {
+                    variant: if iter.peek() == Some(&lexerToken::Colon) {
+                        assert_eq!(iter.next().unwrap(), lexerToken::Colon);
+                        if !matches!(iter.peek(), Some(lexerToken::Identifier(_))) {
                             return Err(Expected::StructuredEnumVariantIdentifier);
                         }
                         match iter.next().unwrap() {
-                            Token::Identifier(str) => Some(str),
+                            lexerToken::Identifier(str) => Some(str),
                             _ => unreachable!(),
                         }
                     } else {
@@ -616,24 +607,26 @@ fn parse_tabular_path_segment<'a, Position>(
                 _ => unreachable!(),
             },
 
-            Some(Token::Brac) => {
-                assert_eq!(iter.next().unwrap(), Token::Brac);
+            Some(lexerToken::Brac) => {
+                assert_eq!(iter.next().unwrap(), lexerToken::Brac);
                 match iter.peek() {
-                    Some(Token::Identifier(_)) => match iter.next().unwrap() {
-                        Token::Identifier(str) => {
+                    Some(lexerToken::Identifier(_)) => match iter.next().unwrap() {
+                        lexerToken::Identifier(str) => {
                             match iter.peek() {
-                                Some(Token::Ket) => assert_eq!(iter.next().unwrap(), Token::Ket),
+                                Some(Token::Ket) => {
+                                    assert_eq!(iter.next().unwrap(), lexerToken::Ket)
+                                }
                                 _ => return Err(Expected::Unspecific),
                             };
                             base.push(BasicPathElement {
                                 key: BasicPathElementKey::List(str),
-                                variant: if iter.peek() == Some(&Token::Colon) {
-                                    assert_eq!(iter.next().unwrap(), Token::Colon);
-                                    if !matches!(iter.peek(), Some(Token::Identifier(_))) {
+                                variant: if iter.peek() == Some(&lexerToken::Colon) {
+                                    assert_eq!(iter.next().unwrap(), lexerToken::Colon);
+                                    if !matches!(iter.peek(), Some(lexerToken::Identifier(_))) {
                                         return Err(Expected::StructuredEnumVariantIdentifier);
                                     }
                                     match iter.next().unwrap() {
-                                        Token::Identifier(str) => Some(str),
+                                        lexerToken::Identifier(str) => Some(str),
                                         _ => unreachable!(),
                                     }
                                 } else {
@@ -649,8 +642,8 @@ fn parse_tabular_path_segment<'a, Position>(
             _ => return Err(Expected::Unspecific),
         }
 
-        match iter.peek() {
-            Some(Token::Period) => assert_eq!(iter.next().unwrap(), Token::Period),
+        match iter.peek().map(|t| t.token) {
+            Some(lexerToken::Period) => assert_eq!(iter.next().unwrap().token, lexerToken::Period),
             _ => break,
         }
         if multi.is_some() {
