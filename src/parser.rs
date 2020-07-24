@@ -535,8 +535,8 @@ fn parse_path_segment<'a, 'b, 'c, Position>(
                 match iter.peek().map(|t| t.token) {
                     Some(lexerToken::Identifier(_)) => match iter.next().unwrap().token {
                         lexerToken::Identifier(str) => {
-                            match iter.peek() {
-                                Some(lexerToken::Ket) => assert_eq!(iter.next().unwrap(), Token::Ket),
+                            match iter.peek().map(|t| t.token) {
+                                Some(lexerToken::Ket) => assert_eq!(iter.next().unwrap().token, lexerToken::Ket),
                                 _ => return Err(Expected::Unspecific),
                             }
                             base.push(BasicPathElement {
@@ -544,7 +544,14 @@ fn parse_path_segment<'a, 'b, 'c, Position>(
                                 variant: if iter.peek().map(|t| &t.token) == Some(&lexerToken::Colon) {
                                     assert_eq!(iter.next().unwrap().token, lexerToken::Colon);
                                     if !matches!(iter.peek().map(|t| t.token), Some(lexerToken::Identifier(_))) {
-                                        diagnostics.push(Diagnostic{r#type: DiagnosticType::MissingVariantIdentifier, labels: vec![DiagnosticLabel::new("Colons in headings must be followed by an identifier.", iter.peek().map(|t| t.span), DiagnosticLabelPriority::Primary)]});
+                                        diagnostics.push(Diagnostic{
+                                            r#type: DiagnosticType::MissingVariantIdentifier,
+                                            labels: vec![DiagnosticLabel::new(
+                                                "Colons in headings must be followed by an identifier.",
+                                                iter.peek().map(|t| t.span),
+                                                DiagnosticLabelPriority::Primary,
+                                            )]
+                                        });
                                         return Err(());
                                     }
                                     match iter.next().unwrap().token {
