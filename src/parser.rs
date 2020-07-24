@@ -132,6 +132,20 @@ enum_properties! {
             level: DiagnosticLevel::Error,
             title: "Expected list identifier",
         },
+
+        ExpectedTabularPathSegment {
+            group: DiagnosticGroup::Parsing,
+            code: 9,
+            level: DiagnosticLevel::Error,
+            title: "Expected (tabular) path segment",
+        },
+
+        UnclosedTabularPathMultiSegment {
+            group: DiagnosticGroup::Parsing,
+            code: 10,
+            level: DiagnosticLevel::Error,
+            title: "Unclosed tabular path multi segment",
+        },
     }
 }
 
@@ -534,10 +548,10 @@ fn parse_path_segment<'a, 'b, 'c, Position>(
                         }
                         _ => unreachable!(),
                     },
-                    Token::Brac => {
+                    lexerToken::Brac => {
                         tabular = Some(parse_tabular_path_segment(iter)?);
                         match iter.peek() {
-                            Some(Token::Ket) => assert_eq!(iter.next().unwrap(), Token::Ket),
+                            Some(lexerToken::Ket) => assert_eq!(iter.next().unwrap(), lexerToken::Ket),
                             _ => return Err(Expected::Unspecific),
                         }
                     }
@@ -550,9 +564,9 @@ fn parse_path_segment<'a, 'b, 'c, Position>(
         if tabular.is_some() {
             break;
         }
-        match iter.peek() {
-            Some(Token::Newline) => break,
-            Some(Token::Period) => assert_eq!(iter.next().unwrap(), Token::Period),
+        match iter.peek().map(|t| t.token) {
+            Some(lexerToken::Newline) => break,
+            Some(lexerToken::Period) => assert_eq!(iter.next().unwrap().token, lexerToken::Period),
             _ => return Err(Expected::Unspecific),
         }
     }
@@ -562,13 +576,14 @@ fn parse_path_segment<'a, 'b, 'c, Position>(
 
 fn parse_tabular_path_segments<'a, Position>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
+    diagnostics: &mut Diagnostics<Position>,
 ) -> Result<Vec<TabularPathSegment<'a>>, ()> {
     let mut segments = vec![];
     while !matches!(
         iter.peek().map(|t| t.token),
         None | Some(lexerToken::Ce) | Some(lexerToken::Ket)
     ) {
-        segments.push(parse_tabular_path_segment(iter)?);
+        segments.push(parse_tabular_path_segment(iter, diagnostics)?);
 
         match iter.peek().map(|t| t.token) {
             Some(lexerToken::Comma) => assert_eq!(iter.next().unwrap().token, lexerToken::Comma),
@@ -587,24 +602,53 @@ fn parse_tabular_path_segment<'a, Position>(
     loop {
         match iter.peek().map(|t| t.token) {
             Some(lexerToken::Bra) => {
-                assert_eq!(iter.next().unwrap(), lexerToken::Bra);
-                multi = Some(parse_tabular_path_segments(iter)?);
-                match iter.peek() {
-                    Some(Token::Ce) => assert_eq!(iter.next().unwrap(), lexerToken::Ce),
-                    _ => return Err(Expected::Unspecific),
+                let Token { token, span } = iter.next().unwrap();
+                assert_eq!(token, lexerToken::Bra);
+                multi = Some(parse_tabular_path_segments(iter, diagnostics)?);
+                match iter.peek().map(|t| t.token) {
+                    Some(lexerToken::Ce) => assert_eq!(iter.next().unwrap().token, lexerToken::Ce),
+                    _ => {
+                        diagnostics.push(Diagnostic {
+                            r#type: DiagnosticType::UnclosedTabularPathMultiSegment,
+                            labels: vec![
+                                DiagnosticLabel::new(
+                                    "This multi segment starts here...",
+                                    span,
+                                    DiagnosticLabelPriority::Auxiliary,
+                                ),
+                                DiagnosticLabel::new(
+                                    "...but is not closed at this point.",
+                                    iter.peek().map(|t| t.span.start..t.span.start),
+                                    DiagnosticLabelPriority::Primary,
+                                ),
+                            ],
+                        });
+                        return Err(());
+                    }
                 }
             }
 
             //TODO: Deduplicate the code
-            Some(lexerToken::Identifier(_)) => match iter.next().unwrap() {
+            Some(lexerToken::Identifier(_)) => match iter.next().unwrap().token {
                 lexerToken::Identifier(str) => base.push(BasicPathElement {
                     key: BasicPathElementKey::Plain(str),
-                    variant: if iter.peek() == Some(&lexerToken::Colon) {
-                        assert_eq!(iter.next().unwrap(), lexerToken::Colon);
-                        if !matches!(iter.peek(), Some(lexerToken::Identifier(_))) {
-                            return Err(Expected::StructuredEnumVariantIdentifier);
+                    variant: if iter.peek().map(|t| &t.token) == Some(&lexerToken::Colon) {
+                        assert_eq!(iter.next().unwrap().token, lexerToken::Colon);
+                        if !matches!(
+                            iter.peek().map(|t| &t.token),
+                            Some(lexerToken::Identifier(_))
+                        ) {
+                            diagnostics.push(Diagnostic {
+                                r#type: DiagnosticType::MissingVariantIdentifier,
+                                labels: vec![DiagnosticLabel::new(
+                                    None,
+                                    iter.peek().map(|t| t.span.start..t.span.start),
+                                    DiagnosticLabelPriority::Primary,
+                                )],
+                            });
+                            return Err(());
                         }
-                        match iter.next().unwrap() {
+                        match iter.next().unwrap().token {
                             lexerToken::Identifier(str) => Some(str),
                             _ => unreachable!(),
                         }
@@ -668,10 +712,30 @@ fn parse_tabular_path_segment<'a, Position>(
                         }
                         _ => unreachable!(),
                     },
-                    _ => return Err(Expected::Unspecific),
+                    _ => {
+                        diagnostics.push(Diagnostic {
+                            r#type: DiagnosticType::ExpectedListIdentifier,
+                            labels: vec![DiagnosticLabel::new(
+                                None,
+                                iter.peek().map(|t| t.span),
+                                DiagnosticLabelPriority::Primary,
+                            )],
+                        });
+                        return Err(());
+                    }
                 }
             }
-            _ => return Err(Expected::Unspecific),
+            _ => {
+                diagnostics.push(Diagnostic {
+                    r#type: DiagnosticType::ExpectedTabularPathSegment,
+                    labels: vec![DiagnosticLabel::new(
+                        "Expected {, [ or an identifier here.",
+                        iter.peek().map(|t| t.span),
+                        DiagnosticLabelPriority::Primary,
+                    )],
+                });
+                return Err(());
+            }
         }
 
         match iter.peek().map(|t| t.token) {
