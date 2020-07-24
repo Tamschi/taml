@@ -124,7 +124,14 @@ enum_properties! {
             code: 7,
             level: DiagnosticLevel::Error,
             title: "Values line too short",
-        }
+        },
+
+        ExpectedListIdentifier {
+            group: DiagnosticGroup::Parsing,
+            code: 8,
+            level: DiagnosticLevel::Error,
+            title: "Expected list identifier",
+        },
     }
 }
 
@@ -573,6 +580,7 @@ fn parse_tabular_path_segments<'a, Position>(
 
 fn parse_tabular_path_segment<'a, Position>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
+    diagnostics: &mut Diagnostics<Position>,
 ) -> Result<TabularPathSegment<'a>, ()> {
     let mut base = vec![];
     let mut multi = None;
@@ -608,26 +616,50 @@ fn parse_tabular_path_segment<'a, Position>(
             },
 
             Some(lexerToken::Brac) => {
-                assert_eq!(iter.next().unwrap(), lexerToken::Brac);
-                match iter.peek() {
-                    Some(lexerToken::Identifier(_)) => match iter.next().unwrap() {
+                assert_eq!(iter.next().unwrap().token, lexerToken::Brac);
+                match iter.peek().map(|t| t.token) {
+                    Some(lexerToken::Identifier(_)) => match iter.next().unwrap().token {
                         lexerToken::Identifier(str) => {
-                            match iter.peek() {
-                                Some(Token::Ket) => {
-                                    assert_eq!(iter.next().unwrap(), lexerToken::Ket)
+                            match iter.peek().map(|t| t.token) {
+                                Some(lexerToken::Ket) => {
+                                    assert_eq!(iter.next().unwrap().token, lexerToken::Ket)
                                 }
-                                _ => return Err(Expected::Unspecific),
+                                _ => {
+                                    diagnostics.push(Diagnostic {
+                                        r#type: DiagnosticType::ExpectedListIdentifier,
+                                        labels: vec![DiagnosticLabel::new(
+                                            None,
+                                            iter.next().map(|t| t.span),
+                                            DiagnosticLabelPriority::Primary,
+                                        )],
+                                    });
+                                    return Err(());
+                                }
                             };
                             base.push(BasicPathElement {
                                 key: BasicPathElementKey::List(str),
-                                variant: if iter.peek() == Some(&lexerToken::Colon) {
-                                    assert_eq!(iter.next().unwrap(), lexerToken::Colon);
-                                    if !matches!(iter.peek(), Some(lexerToken::Identifier(_))) {
-                                        return Err(Expected::StructuredEnumVariantIdentifier);
-                                    }
-                                    match iter.next().unwrap() {
-                                        lexerToken::Identifier(str) => Some(str),
-                                        _ => unreachable!(),
+                                variant: if iter.peek().map(|t| &t.token)
+                                    == Some(&lexerToken::Colon)
+                                {
+                                    assert_eq!(iter.next().unwrap().token, lexerToken::Colon);
+                                    if matches!(
+                                        iter.peek().map(|t| t.token),
+                                        Some(lexerToken::Identifier(_))
+                                    ) {
+                                        match iter.next().unwrap().token {
+                                            lexerToken::Identifier(str) => Some(str),
+                                            _ => unreachable!(),
+                                        }
+                                    }else{
+                                        diagnostics.push(Diagnostic {
+                                            r#type: DiagnosticType::MissingVariantIdentifier,
+                                            labels: vec![DiagnosticLabel::new(
+                                                "Colons in paths must be followed by a variant identifier.",
+                                                iter.next().map(|t| t.span),
+                                                DiagnosticLabelPriority::Primary,
+                                            )],
+                                        });
+                                        return Err(());
                                     }
                                 } else {
                                     None
