@@ -1,4 +1,4 @@
-use {serde::Deserialize, taml::deserializer::from_str};
+use {serde::Deserialize, smallvec::smallvec, taml::deserializer::from_str};
 
 //TODO: Split up this test.
 #[test]
@@ -52,8 +52,9 @@ fn deserializer() {
     }
 
     assert_eq!(
-        dbg!(from_str(
-            "
+        dbg!(
+            from_str(
+                "
                 some: ()
 
                 #
@@ -103,7 +104,9 @@ fn deserializer() {
                 false: false
                 true: true
             ",
-        )),
+            )
+            .0
+        ),
         Ok(Deserializable {
             none: None,
             some: Some(()),

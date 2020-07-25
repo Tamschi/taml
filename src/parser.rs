@@ -10,11 +10,12 @@ use {
         fmt::Display,
         iter::{self, Peekable},
         ops::Range,
+        string::String as stdString,
     },
     woc::Woc,
 };
 
-trait IntoToken<'a, Position> {
+pub trait IntoToken<'a, Position> {
     fn into_token(self) -> Token<'a, Position>;
 }
 
@@ -42,7 +43,7 @@ impl<'a, Position> IntoToken<'a, Position> for (lexerToken<'a>, Range<Position>)
 }
 
 #[derive(Clone, Copy, Debug)]
-enum DiagnosticLevel {
+pub enum DiagnosticLevel {
     Warning,
     Error,
 }
@@ -191,16 +192,16 @@ impl Display for DiagnosticType {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum DiagnosticLabelPriority {
+pub enum DiagnosticLabelPriority {
     Primary,
     Auxiliary,
 }
 
 #[derive(Debug, Clone)]
 pub struct DiagnosticLabel<Position> {
-    caption: Option<&'static str>,
-    span: Option<Range<Position>>,
-    priority: DiagnosticLabelPriority,
+    pub caption: Option<&'static str>,
+    pub span: Option<Range<Position>>,
+    pub priority: DiagnosticLabelPriority,
 }
 
 impl<Position> DiagnosticLabel<Position> {
@@ -219,8 +220,25 @@ impl<Position> DiagnosticLabel<Position> {
 
 #[derive(Debug, Clone)]
 pub struct Diagnostic<Position> {
-    r#type: DiagnosticType,
-    labels: Vec<DiagnosticLabel<Position>>,
+    pub r#type: DiagnosticType,
+    pub labels: Vec<DiagnosticLabel<Position>>,
+}
+
+impl<Position> Diagnostic<Position> {
+    #[must_use]
+    pub fn code(&self) -> stdString {
+        format!("TAML-{}{:04}", self.r#type.group.code, self.r#type.code)
+    }
+
+    #[must_use]
+    pub fn level(&self) -> DiagnosticLevel {
+        self.r#type.level
+    }
+
+    #[must_use]
+    pub fn message(&self) -> &str {
+        self.r#type.title
+    }
 }
 
 pub type Diagnostics<Position> = SmallVec<[Diagnostic<Position>; 0]>;

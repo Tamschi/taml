@@ -4,8 +4,8 @@
 
 use {
     argh::FromArgs,
+    cast::u64,
     logos::Logos as _,
-    map_next::MapNext as _,
     std::{
         ffi::OsStr,
         fs,
@@ -14,6 +14,7 @@ use {
     },
     taml::{
         formatting::{CanonicalFormatScanner, Recommendation},
+        parser::parse,
         token::Token,
     },
 };
@@ -220,18 +221,10 @@ fn main() {
 
                 let text = fs::read_to_string(path.as_ref()).unwrap();
 
-                let mut span = None;
-                let lexer = Token::lexer(&text).spanned().map_next(|next| {
-                    if let Some((t, s)) = next {
-                        span = Some(s);
-                        Some(t)
-                    } else {
-                        span = None;
-                        None
-                    }
-                });
+                let lexer = Token::lexer(&text).spanned();
+                let (taml, file_diagnostics) = parse(lexer);
 
-                match lexer.collect() {
+                match taml {
                     Ok(taml) =>
                     {
                         #[allow(clippy::non_ascii_literal)]
@@ -239,36 +232,50 @@ fn main() {
                             println!("✓ {}", path.as_ref().to_string_lossy())
                         }
                     }
-                    Err(expected) => {
+                    Err(expected) =>
+                    {
                         #[allow(clippy::non_ascii_literal)]
                         if !quiet {
                             println!("✕ {}", path.as_ref().to_string_lossy())
                         }
-                        let file_span = codemap
-                            .add_file(path.as_ref().to_string_lossy().to_string(), text)
-                            .span;
-
-                        let error_span = if let Some(error_span) = span {
-                            file_span.subspan(error_span.start as u64, error_span.end as u64)
-                        } else {
-                            file_span.subspan(file_span.len(), file_span.len())
-                        };
-
-                        let label = SpanLabel {
-                            span: error_span,
-                            style: SpanStyle::Primary,
-                            label: Some(format!("Expected {:?}", expected)),
-                        };
-
-                        let diagnostic = Diagnostic {
-                            level: Level::Error,
-                            message: "".to_owned(),
-                            code: None,
-                            spans: vec![label],
-                        };
-
-                        diagnostics.push(diagnostic)
                     }
+                }
+                if !quiet && !file_diagnostics.is_empty() {
+                    let file_span = codemap
+                        .add_file(path.as_ref().to_string_lossy().to_string(), text)
+                        .span;
+
+                    diagnostics.extend(file_diagnostics.into_iter().map(|diagnostic| {
+                        Diagnostic {
+                            code: Some(diagnostic.code()),
+                            level: match diagnostic.level() {
+                                taml::parser::DiagnosticLevel::Warning => Level::Warning,
+                                taml::parser::DiagnosticLevel::Error => Level::Error,
+                            },
+                            message: diagnostic.message().to_string(),
+                            spans: diagnostic
+                                .labels
+                                .into_iter()
+                                .map(|label| SpanLabel {
+                                    label: label.caption.map(|c| c.to_string()),
+                                    style: match label.priority {
+                                        taml::parser::DiagnosticLabelPriority::Primary => {
+                                            SpanStyle::Primary
+                                        }
+                                        taml::parser::DiagnosticLabelPriority::Auxiliary => {
+                                            SpanStyle::Secondary
+                                        }
+                                    },
+                                    span: match label.span {
+                                        Some(span) => {
+                                            file_span.subspan(u64(span.start), u64(span.end))
+                                        }
+                                        None => file_span.subspan(file_span.len(), file_span.len()),
+                                    },
+                                })
+                                .collect(),
+                        }
+                    }))
                 }
             }
         }

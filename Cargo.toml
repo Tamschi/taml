@@ -21,7 +21,6 @@ enum_properties = "0.2.1"
 gnaw = { path = "../gnaw" }
 lazy-transform-str = { path = "../lazy-transform-str" }
 logos = "0.11.4"
-map-next = { path = "../map-next", optional = true }
 serde = { version = "1.0.114", default-features = false }
 smallvec = "1.4.1"
 smartstring = "0.2.3"
