@@ -1,7 +1,6 @@
-use crate::parser::{Key, List, ListIter, Map, MapIter};
 use {
     crate::{
-        parser::{Diagnostics, Taml},
+        parser::{parse, Diagnostics, Key, List, ListIter, Map, MapIter, Taml},
         token::Token,
     },
     serde::de,
@@ -13,7 +12,7 @@ pub type Error = de::value::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[allow(clippy::missing_errors_doc)]
-pub fn from_str<T: de::DeserializeOwned>(str: &str) -> Result<T> {
+pub fn from_str<T: de::DeserializeOwned>(str: &str) -> (Result<T>, Diagnostics<()>) {
     use logos::Logos as _;
     let lexer = Token::lexer(str);
     from_tokens(lexer)
@@ -24,11 +23,13 @@ pub fn from_tokens<'de, T: de::Deserialize<'de>>(
     tokens: impl IntoIterator<Item = Token<'de>>,
 ) -> (Result<T>, Diagnostics<()>) {
     //TODO: This seems overly explicit.
-    use std::iter::FromIterator as _;
-    let taml =
-        std::result::Result::<crate::parser::Map<'de>, crate::parser::Expected>::from_iter(tokens)
-            .map_err(|expected| de::Error::custom(format_args!("Expected {:?}", expected)))?;
-    from_taml(&Taml::Map(taml))
+    let (root, diagnostics) = parse(tokens);
+
+    (
+        root.map_err(|()| de::Error::custom("Pasing error"))
+            .and_then(|root| from_taml(&Taml::Map(root))),
+        diagnostics,
+    )
 }
 
 #[allow(clippy::missing_errors_doc)]
