@@ -6,6 +6,7 @@ use {
     argh::FromArgs,
     cast::u64,
     logos::Logos as _,
+    smallvec::smallvec,
     std::{
         ffi::OsStr,
         fs,
@@ -222,7 +223,9 @@ fn main() {
                 let text = fs::read_to_string(path.as_ref()).unwrap();
 
                 let lexer = Token::lexer(&text).spanned();
-                let (taml, file_diagnostics) = parse(lexer);
+
+                let mut file_diagnostics = smallvec![];
+                let taml = parse(lexer, &mut file_diagnostics);
 
                 match taml {
                     Ok(taml) =>

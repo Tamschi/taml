@@ -1,6 +1,6 @@
 use {
     crate::{
-        parser::{parse, Diagnostics, Key, List, ListIter, Map, MapIter, Taml},
+        parser::{parse, Diagnostics, IntoToken, Key, List, ListIter, Map, MapIter, Taml},
         token::Token,
     },
     serde::de,
@@ -12,24 +12,24 @@ pub type Error = de::value::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[allow(clippy::missing_errors_doc)]
-pub fn from_str<T: de::DeserializeOwned>(str: &str) -> (Result<T>, Diagnostics<()>) {
+pub fn from_str<T: de::DeserializeOwned>(
+    str: &str,
+    diagnostics: &mut impl Diagnostics<usize>,
+) -> Result<T> {
     use logos::Logos as _;
-    let lexer = Token::lexer(str);
-    from_tokens(lexer)
+    let lexer = Token::lexer(str).spanned();
+    from_tokens(lexer, diagnostics)
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn from_tokens<'de, T: de::Deserialize<'de>>(
-    tokens: impl IntoIterator<Item = Token<'de>>,
-) -> (Result<T>, Diagnostics<()>) {
+pub fn from_tokens<'de, T: de::Deserialize<'de>, Position: Clone>(
+    tokens: impl IntoIterator<Item = impl IntoToken<'de, Position>>,
+    diagnostics: &mut impl Diagnostics<Position>,
+) -> Result<T> {
     //TODO: This seems overly explicit.
-    let (root, diagnostics) = parse(tokens);
+    let root = parse(tokens, diagnostics).map_err(|()| de::Error::custom("Pasing error"))?;
 
-    (
-        root.map_err(|()| de::Error::custom("Pasing error"))
-            .and_then(|root| from_taml(&Taml::Map(root))),
-        diagnostics,
-    )
+    from_taml(&Taml::Map(root))
 }
 
 #[allow(clippy::missing_errors_doc)]
