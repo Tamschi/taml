@@ -213,13 +213,13 @@ pub trait Reporter<Position> {
 }
 
 impl<Position> Reporter<Position> for () {
-    fn report_with(&mut self, diagnostic: impl FnOnce() -> Diagnostic<Position>) {
+    fn report_with(&mut self, _diagnostic: impl FnOnce() -> Diagnostic<Position>) {
         // Do nothing.
     }
 
     fn report_many_with<I: IntoIterator<Item = Diagnostic<Position>>>(
         &mut self,
-        diagnostics: impl FnOnce() -> I,
+        _diagnostics: impl FnOnce() -> I,
     ) {
         // Do nothing.
     }

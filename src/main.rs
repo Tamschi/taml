@@ -1,7 +1,3 @@
-#![warn(clippy::pedantic)]
-#![allow(unused_variables)] //TODO
-#![allow(clippy::default_trait_access)] // because of derive(FromArgs).
-
 use {
     argh::FromArgs,
     cast::u64,
@@ -227,14 +223,14 @@ fn main() {
                 let taml = parse(lexer, &mut file_diagnostics);
 
                 match taml {
-                    Ok(taml) =>
+                    Ok(_) =>
                     {
                         #[allow(clippy::non_ascii_literal)]
                         if !quiet {
                             println!("✓ {}", path.as_ref().to_string_lossy())
                         }
                     }
-                    Err(expected) =>
+                    Err(()) =>
                     {
                         #[allow(clippy::non_ascii_literal)]
                         if !quiet {

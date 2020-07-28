@@ -42,7 +42,7 @@ fn invalid_type<'de>(unexp: &'de Taml<'de>, exp: &dyn de::Expected) -> Error {
     de::Error::invalid_type(
         match unexp {
             Taml::String(str) => de::Unexpected::Str(str.as_ref()),
-            Taml::Integer(str) => de::Unexpected::Other("integer"), //TODO
+            Taml::Integer(_) => de::Unexpected::Other("integer"), //TODO
             Taml::Float(str) => str
                 .parse()
                 .map_or_else(|_| de::Unexpected::Other(str), de::Unexpected::Float),
@@ -82,7 +82,7 @@ fn invalid_value<'de>(unexp: &'de Taml<'de>, exp: &dyn de::Expected) -> Error {
 
 impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     type Error = Error;
-    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
@@ -169,7 +169,7 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
                 let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
                 visitor.visit_u8(value)
             }
-            other => Err(invalid_type(self.0, &visitor)),
+            other => Err(invalid_type(other, &visitor)),
         }
     }
     fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value>
@@ -181,7 +181,7 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
                 let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
                 visitor.visit_u16(value)
             }
-            other => Err(invalid_type(self.0, &visitor)),
+            other => Err(invalid_type(other, &visitor)),
         }
     }
     fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value>
@@ -193,7 +193,7 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
                 let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
                 visitor.visit_u32(value)
             }
-            other => Err(invalid_type(self.0, &visitor)),
+            other => Err(invalid_type(other, &visitor)),
         }
     }
     fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value>
@@ -205,7 +205,7 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
                 let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
                 visitor.visit_u64(value)
             }
-            other => Err(invalid_type(self.0, &visitor)),
+            other => Err(invalid_type(other, &visitor)),
         }
     }
     fn deserialize_u128<V>(self, visitor: V) -> Result<V::Value>
@@ -217,7 +217,7 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
                 let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
                 visitor.visit_u128(value)
             }
-            other => Err(invalid_type(self.0, &visitor)),
+            other => Err(invalid_type(other, &visitor)),
         }
     }
     fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
@@ -229,7 +229,7 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
                 let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
                 visitor.visit_f32(value)
             }
-            other => Err(invalid_type(self.0, &visitor)),
+            other => Err(invalid_type(other, &visitor)),
         }
     }
     fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
@@ -241,7 +241,7 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
                 let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
                 visitor.visit_f64(value)
             }
-            other => Err(invalid_type(self.0, &visitor)),
+            other => Err(invalid_type(other, &visitor)),
         }
     }
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value>
@@ -253,7 +253,7 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
                 let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
                 visitor.visit_char(value)
             }
-            other => Err(invalid_type(self.0, &visitor)),
+            other => Err(invalid_type(other, &visitor)),
         }
     }
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value>
@@ -262,7 +262,7 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     {
         match self.0 {
             Taml::String(str) => visitor.visit_str(str),
-            other => Err(invalid_type(self.0, &visitor)),
+            other => Err(invalid_type(other, &visitor)),
         }
     }
     fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
@@ -271,13 +271,13 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     {
         self.deserialize_str(visitor)
     }
-    fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_bytes<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
         unimplemented!("Byte slices are not supported")
     }
-    fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_byte_buf<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
@@ -303,13 +303,13 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
             Err(invalid_type(self.0, &visitor))
         }
     }
-    fn deserialize_unit_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value>
+    fn deserialize_unit_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
         self.deserialize_unit(visitor)
     }
-    fn deserialize_newtype_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value>
+    fn deserialize_newtype_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
@@ -336,7 +336,7 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     }
     fn deserialize_tuple_struct<V>(
         self,
-        name: &'static str,
+        _name: &'static str,
         len: usize,
         visitor: V,
     ) -> Result<V::Value>
@@ -356,8 +356,8 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     }
     fn deserialize_struct<V>(
         self,
-        name: &'static str,
-        fields: &'static [&'static str],
+        _name: &'static str,
+        _fields: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value>
     where
@@ -367,8 +367,8 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
     }
     fn deserialize_enum<V>(
         self,
-        name: &'static str,
-        variants: &'static [&'static str],
+        _name: &'static str,
+        _variants: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value>
     where
@@ -455,13 +455,13 @@ impl<'a, 'de> de::Deserializer<'de> for Deserializer<'a, 'de> {
         }
 
         match self.0 {
-            Taml::StructuredVariant { variant, .. }
-            | Taml::TupleVariant { variant, .. }
-            | Taml::UnitVariant { variant } => visitor.visit_enum(EnumVariantAccess(self.0)),
+            Taml::StructuredVariant { .. }
+            | Taml::TupleVariant { .. }
+            | Taml::UnitVariant { .. } => visitor.visit_enum(EnumVariantAccess(self.0)),
             _ => Err(invalid_type(self.0, &visitor)),
         }
     }
-    fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_identifier<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
