@@ -1,6 +1,7 @@
 use {
     crate::{
-        parser::{parse, Diagnostics, IntoToken, Key, List, ListIter, Map, MapIter, Taml},
+        diagnostics::Diagnostics,
+        parser::{parse, IntoToken, Key, List, ListIter, Map, MapIter, Taml},
         token::Token,
     },
     serde::de,

@@ -6,7 +6,6 @@ use {
     argh::FromArgs,
     cast::u64,
     logos::Logos as _,
-    smallvec::smallvec,
     std::{
         ffi::OsStr,
         fs,
@@ -224,7 +223,7 @@ fn main() {
 
                 let lexer = Token::lexer(&text).spanned();
 
-                let mut file_diagnostics = smallvec![];
+                let mut file_diagnostics = vec![];
                 let taml = parse(lexer, &mut file_diagnostics);
 
                 match taml {
@@ -252,8 +251,8 @@ fn main() {
                         Diagnostic {
                             code: Some(diagnostic.code()),
                             level: match diagnostic.level() {
-                                taml::parser::DiagnosticLevel::Warning => Level::Warning,
-                                taml::parser::DiagnosticLevel::Error => Level::Error,
+                                taml::diagnostics::DiagnosticLevel::Warning => Level::Warning,
+                                taml::diagnostics::DiagnosticLevel::Error => Level::Error,
                             },
                             message: diagnostic.message().to_string(),
                             spans: diagnostic
@@ -262,10 +261,10 @@ fn main() {
                                 .map(|label| SpanLabel {
                                     label: label.caption.map(|c| c.to_string()),
                                     style: match label.priority {
-                                        taml::parser::DiagnosticLabelPriority::Primary => {
+                                        taml::diagnostics::DiagnosticLabelPriority::Primary => {
                                             SpanStyle::Primary
                                         }
-                                        taml::parser::DiagnosticLabelPriority::Auxiliary => {
+                                        taml::diagnostics::DiagnosticLabelPriority::Auxiliary => {
                                             SpanStyle::Secondary
                                         }
                                     },
