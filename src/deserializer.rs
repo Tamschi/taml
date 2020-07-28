@@ -1,6 +1,6 @@
 use {
     crate::{
-        diagnostics::Diagnostics,
+        diagnostics::Reporter,
         parser::{parse, IntoToken, Key, List, ListIter, Map, MapIter, Taml},
         token::Token,
     },
@@ -15,7 +15,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[allow(clippy::missing_errors_doc)]
 pub fn from_str<T: de::DeserializeOwned>(
     str: &str,
-    diagnostics: &mut impl Diagnostics<usize>,
+    diagnostics: &mut impl Reporter<usize>,
 ) -> Result<T> {
     use logos::Logos as _;
     let lexer = Token::lexer(str).spanned();
@@ -25,7 +25,7 @@ pub fn from_str<T: de::DeserializeOwned>(
 #[allow(clippy::missing_errors_doc)]
 pub fn from_tokens<'de, T: de::Deserialize<'de>, Position: Clone>(
     tokens: impl IntoIterator<Item = impl IntoToken<'de, Position>>,
-    diagnostics: &mut impl Diagnostics<Position>,
+    diagnostics: &mut impl Reporter<Position>,
 ) -> Result<T> {
     //TODO: This seems overly explicit.
     let root = parse(tokens, diagnostics).map_err(|()| de::Error::custom("Pasing error"))?;

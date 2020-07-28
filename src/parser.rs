@@ -3,7 +3,7 @@
 use {
     crate::{
         diagnostics::{
-            Diagnostic, DiagnosticLabel, DiagnosticLabelPriority, DiagnosticType, Diagnostics,
+            Diagnostic, DiagnosticLabel, DiagnosticLabelPriority, DiagnosticType, Reporter,
         },
         token::Token as lexerToken,
     },
@@ -174,7 +174,7 @@ impl<'a> TabularPathSegment<'a> {
 
 pub fn parse<'a, Position: Clone>(
     iter: impl IntoIterator<Item = impl IntoToken<'a, Position>>,
-    diagnostics: &mut impl Diagnostics<Position>,
+    diagnostics: &mut impl Reporter<Position>,
 ) -> Result<Map<'a>, ()> {
     let mut iter = iter.into_iter().map(|t| t.into_token()).peekable();
 
@@ -188,7 +188,7 @@ pub fn parse<'a, Position: Clone>(
         match next {
             lexerToken::Error => {
                 // Stop parsing but collect all the tokenizer diagnostics.
-                diagnostics.extend_with(|| {
+                diagnostics.report_many_with(|| {
                     iter::once(iter.next().unwrap().span)
                         .chain(iter.filter_map(|t| {
                             if let Token {
@@ -228,7 +228,7 @@ pub fn parse<'a, Position: Clone>(
 
                 path.truncate(depth - 1);
                 if path.len() != depth - 1 {
-                    diagnostics.push_with(|| Diagnostic {
+                    diagnostics.report_with(|| Diagnostic {
                             r#type: DiagnosticType::HeadingTooDeep,
                             labels: vec![
                                 DiagnosticLabel::new(
@@ -246,7 +246,7 @@ pub fn parse<'a, Position: Clone>(
                     .and_then(|s: &PathSegment| s.tabular.as_ref())
                     .is_some()
                 {
-                    diagnostics.push_with(|| Diagnostic {
+                    diagnostics.report_with(|| Diagnostic {
                             r#type: DiagnosticType::SubsectionInTabularSection,
                             labels: vec![
                                 DiagnosticLabel::new(
@@ -318,7 +318,7 @@ pub fn parse<'a, Position: Clone>(
                         if let hash_map::Entry::Vacant(vacant) = selection.entry(key) {
                             vacant.insert(value);
                         } else {
-                            diagnostics.push_with(|| Diagnostic {
+                            diagnostics.report_with(|| Diagnostic {
                                 r#type: DiagnosticType::KeyPreviouslyDefined,
                                 labels: vec![DiagnosticLabel::new(
                                     "This key has already been assigned a value.",
@@ -339,7 +339,7 @@ pub fn parse<'a, Position: Clone>(
 
 fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
-    diagnostics: &mut impl Diagnostics<Position>,
+    diagnostics: &mut impl Reporter<Position>,
 ) -> Result<PathSegment<'a>, ()> {
     let mut base = vec![];
     let mut tabular = None;
@@ -363,7 +363,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
                             iter.peek().map(|t| &t.token),
                             Some(lexerToken::Identifier(_))
                         ) {
-                            diagnostics.push_with(||Diagnostic {
+                            diagnostics.report_with(||Diagnostic {
                                 r#type: DiagnosticType::MissingVariantIdentifier,
                                 labels: vec![DiagnosticLabel::new(
                                     "Colons in (non-tabular) paths must be followed by a variant identifier (for a structured enum).",
@@ -392,7 +392,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
                             match iter.peek().map(|t| &t.token) {
                                 Some(lexerToken::Ket) => assert_eq!(iter.next().unwrap().token, lexerToken::Ket),
                                 _ => {
-                                    diagnostics.push_with(||Diagnostic{
+                                    diagnostics.report_with(||Diagnostic{
                                         r#type: DiagnosticType::UnclosedListKey,
                                         labels: vec![
                                             DiagnosticLabel::new("The list key is opened here...", brac_span, DiagnosticLabelPriority::Auxiliary),
@@ -407,7 +407,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
                                 variant: if iter.peek().map(|t| &t.token) == Some(&lexerToken::Colon) {
                                     assert_eq!(iter.next().unwrap().token, lexerToken::Colon);
                                     if !matches!(iter.peek().map(|t| &t.token), Some(lexerToken::Identifier(_))) {
-                                        diagnostics.push_with(||Diagnostic{
+                                        diagnostics.report_with(||Diagnostic{
                                             r#type: DiagnosticType::MissingVariantIdentifier,
                                             labels: vec![DiagnosticLabel::new(
                                                 "Colons in headings must be followed by an identifier.",
@@ -433,7 +433,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
                         match iter.peek().map(|t| &t.token) {
                             Some(lexerToken::Ket) => assert_eq!(iter.next().unwrap().token, lexerToken::Ket),
                             _ =>{
-                                diagnostics.push_with(||Diagnostic{
+                                diagnostics.report_with(||Diagnostic{
                                     r#type: DiagnosticType::UnclosedTabularPathSection,
                                     labels: vec![
                                         DiagnosticLabel::new("The tabular section is opened here...", brac_span, DiagnosticLabelPriority::Auxiliary),
@@ -445,7 +445,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
                         }
                     }
                     _ => {
-                        diagnostics.push_with(||Diagnostic {
+                        diagnostics.report_with(||Diagnostic {
                             r#type: DiagnosticType::ExpectedPathSegment,
                             labels: vec![DiagnosticLabel::new(
                                 "Expected [ or an identifier here.",
@@ -456,7 +456,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
                 }
             }
             Some(_) => {
-                diagnostics.push_with(||Diagnostic {
+                diagnostics.report_with(||Diagnostic {
                     r#type: DiagnosticType::ExpectedPathSegment,
                     labels: vec![DiagnosticLabel::new(
                         "Expected [ or an identifier here.",
@@ -475,7 +475,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
             Some(lexerToken::Newline) | Some(lexerToken::Comment(_)) => break,
             Some(lexerToken::Period) => assert_eq!(iter.next().unwrap().token, lexerToken::Period),
             _ => {
-                diagnostics.push_with(|| Diagnostic {
+                diagnostics.report_with(|| Diagnostic {
                     r#type: DiagnosticType::InvalidPathContinuation,
                     labels: vec![DiagnosticLabel::new(
                         "Expected a period or end of line",
@@ -493,7 +493,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
 
 fn parse_tabular_path_segments<'a, Position: Clone>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
-    diagnostics: &mut impl Diagnostics<Position>,
+    diagnostics: &mut impl Reporter<Position>,
 ) -> Result<Vec<TabularPathSegment<'a>>, ()> {
     let mut segments = vec![];
     while !matches!(
@@ -512,7 +512,7 @@ fn parse_tabular_path_segments<'a, Position: Clone>(
 
 fn parse_tabular_path_segment<'a, Position: Clone>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
-    diagnostics: &mut impl Diagnostics<Position>,
+    diagnostics: &mut impl Reporter<Position>,
 ) -> Result<TabularPathSegment<'a>, ()> {
     let mut base = vec![];
     let mut multi = None;
@@ -525,7 +525,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                 match iter.peek().map(|t| &t.token) {
                     Some(lexerToken::Ce) => assert_eq!(iter.next().unwrap().token, lexerToken::Ce),
                     _ => {
-                        diagnostics.push_with(|| Diagnostic {
+                        diagnostics.report_with(|| Diagnostic {
                             r#type: DiagnosticType::UnclosedTabularPathMultiSegment,
                             labels: vec![
                                 DiagnosticLabel::new(
@@ -555,7 +555,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                             iter.peek().map(|t| &t.token),
                             Some(lexerToken::Identifier(_))
                         ) {
-                            diagnostics.push_with(|| Diagnostic {
+                            diagnostics.report_with(|| Diagnostic {
                                 r#type: DiagnosticType::MissingVariantIdentifier,
                                 labels: vec![DiagnosticLabel::new(
                                     None,
@@ -586,7 +586,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                                     assert_eq!(iter.next().unwrap().token, lexerToken::Ket)
                                 }
                                 _ => {
-                                    diagnostics.push_with(|| Diagnostic {
+                                    diagnostics.report_with(|| Diagnostic {
                                         r#type: DiagnosticType::ExpectedListIdentifier,
                                         labels: vec![DiagnosticLabel::new(
                                             None,
@@ -612,7 +612,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                                             _ => unreachable!(),
                                         }
                                     }else{
-                                        diagnostics.push_with(||Diagnostic {
+                                        diagnostics.report_with(||Diagnostic {
                                             r#type: DiagnosticType::MissingVariantIdentifier,
                                             labels: vec![DiagnosticLabel::new(
                                                 "Colons in paths must be followed by a variant identifier.",
@@ -630,7 +630,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                         _ => unreachable!(),
                     },
                     _ => {
-                        diagnostics.push_with(|| Diagnostic {
+                        diagnostics.report_with(|| Diagnostic {
                             r#type: DiagnosticType::ExpectedListIdentifier,
                             labels: vec![DiagnosticLabel::new(
                                 None,
@@ -643,7 +643,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                 }
             }
             _ => {
-                diagnostics.push_with(|| Diagnostic {
+                diagnostics.report_with(|| Diagnostic {
                     r#type: DiagnosticType::ExpectedTabularPathSegment,
                     labels: vec![DiagnosticLabel::new(
                         "Expected {, [ or an identifier here.",
@@ -770,7 +770,7 @@ fn instantiate<'a, 'b>(
 
 fn parse_key_value_pair<'a, Position: Clone>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
-    diagnostics: &mut impl Diagnostics<Position>,
+    diagnostics: &mut impl Reporter<Position>,
 ) -> Result<((Key<'a>, Range<Position>), Taml<'a>), ()> {
     Ok(match iter.peek().map(|t| &t.token) {
         Some(lexerToken::Identifier(_)) => match iter.next().unwrap() {
@@ -787,7 +787,7 @@ fn parse_key_value_pair<'a, Position: Clone>(
                 ) {
                     assert!(matches!(iter.next().unwrap(), Token{token:lexerToken::Colon,..}))
                 } else {
-                    diagnostics.push_with(|| Diagnostic {
+                    diagnostics.report_with(|| Diagnostic {
                         r#type: DiagnosticType::ExpectedKeyValuePair,
                         labels: vec![DiagnosticLabel::new(
                             "Expected colon.",
@@ -803,7 +803,7 @@ fn parse_key_value_pair<'a, Position: Clone>(
         },
 
         _ => {
-            diagnostics.push_with(||Diagnostic {
+            diagnostics.report_with(||Diagnostic {
                 r#type: DiagnosticType::ExpectedKeyValuePair,
                 labels: vec![DiagnosticLabel ::new(
                     "Structured sections can only contain subsections and key-value pairs.\nKey-value pairs must start with an identifier.",
@@ -819,7 +819,7 @@ fn parse_key_value_pair<'a, Position: Clone>(
 fn parse_values_line<'a, Position: Clone>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
     count: usize,
-    diagnostics: &mut impl Diagnostics<Position>,
+    diagnostics: &mut impl Reporter<Position>,
 ) -> Result<Vec<Taml<'a>>, ()> {
     let mut values = vec![];
     values.push(parse_value(iter, diagnostics)?);
@@ -828,7 +828,7 @@ fn parse_values_line<'a, Position: Clone>(
             assert_eq!(iter.next().unwrap().token, lexerToken::Comma);
             values.push(parse_value(iter, diagnostics)?)
         } else {
-            diagnostics.push_with(|| Diagnostic {
+            diagnostics.report_with(|| Diagnostic {
                 r#type: DiagnosticType::ValuesLineTooShort,
                 labels: vec![DiagnosticLabel::new(
                     "Expected comma here.",
@@ -847,13 +847,13 @@ fn parse_values_line<'a, Position: Clone>(
 
 fn parse_value<'a, Position: Clone>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
-    diagnostics: &mut impl Diagnostics<Position>,
+    diagnostics: &mut impl Reporter<Position>,
 ) -> Result<Taml<'a>, ()> {
     fn err<'a, Position>(
         span: impl Into<Option<Range<Position>>>,
-        diagnostics: &mut impl Diagnostics<Position>,
+        diagnostics: &mut impl Reporter<Position>,
     ) -> Result<Taml<'a>, ()> {
-        diagnostics.push_with(|| Diagnostic {
+        diagnostics.report_with(|| Diagnostic {
             r#type: DiagnosticType::ExpectedValue,
             labels: vec![DiagnosticLabel::new(
                 None,
@@ -887,7 +887,7 @@ fn parse_value<'a, Position: Clone>(
                     assert_eq!(iter.next().unwrap().token, lexerToken::Thesis);
                     Taml::List(items)
                 } else {
-                    diagnostics.push_with(|| Diagnostic {
+                    diagnostics.report_with(|| Diagnostic {
                         r#type: DiagnosticType::UnclosedList,
                         labels: vec![
                             DiagnosticLabel::new(

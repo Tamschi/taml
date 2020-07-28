@@ -202,19 +202,22 @@ impl<Position> Diagnostic<Position> {
     }
 }
 
-// TODO: Turn this into a `Reporter` trait, and allow passing either a reporter or `None` into public API methods.
-pub trait Diagnostics<Position> {
-    fn push_with(&mut self, diagnostic: impl FnOnce() -> Diagnostic<Position>) {
-        self.extend_with(|| iter::once_with(diagnostic))
+pub trait Reporter<Position> {
+    fn report_with(&mut self, diagnostic: impl FnOnce() -> Diagnostic<Position>) {
+        self.report_many_with(|| iter::once_with(diagnostic))
     }
-    fn extend_with<I: IntoIterator<Item = Diagnostic<Position>>>(
+    fn report_many_with<I: IntoIterator<Item = Diagnostic<Position>>>(
         &mut self,
         diagnostics: impl FnOnce() -> I,
     );
 }
 
-impl<Position> Diagnostics<Position> for () {
-    fn extend_with<I: IntoIterator<Item = Diagnostic<Position>>>(
+impl<Position> Reporter<Position> for () {
+    fn report_with(&mut self, diagnostic: impl FnOnce() -> Diagnostic<Position>) {
+        // Do nothing.
+    }
+
+    fn report_many_with<I: IntoIterator<Item = Diagnostic<Position>>>(
         &mut self,
         diagnostics: impl FnOnce() -> I,
     ) {
@@ -222,8 +225,8 @@ impl<Position> Diagnostics<Position> for () {
     }
 }
 
-impl<Position> Diagnostics<Position> for Vec<Diagnostic<Position>> {
-    fn extend_with<I: IntoIterator<Item = Diagnostic<Position>>>(
+impl<Position> Reporter<Position> for Vec<Diagnostic<Position>> {
+    fn report_many_with<I: IntoIterator<Item = Diagnostic<Position>>>(
         &mut self,
         diagnostics: impl FnOnce() -> I,
     ) {
