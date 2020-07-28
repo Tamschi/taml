@@ -15,20 +15,20 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[allow(clippy::missing_errors_doc)]
 pub fn from_str<T: de::DeserializeOwned>(
     str: &str,
-    diagnostics: &mut impl Reporter<usize>,
+    reporter: &mut impl Reporter<usize>,
 ) -> Result<T> {
     use logos::Logos as _;
     let lexer = Token::lexer(str).spanned();
-    from_tokens(lexer, diagnostics)
+    from_tokens(lexer, reporter)
 }
 
 #[allow(clippy::missing_errors_doc)]
 pub fn from_tokens<'de, T: de::Deserialize<'de>, Position: Clone>(
     tokens: impl IntoIterator<Item = impl IntoToken<'de, Position>>,
-    diagnostics: &mut impl Reporter<Position>,
+    reporter: &mut impl Reporter<Position>,
 ) -> Result<T> {
     //TODO: This seems overly explicit.
-    let root = parse(tokens, diagnostics).map_err(|()| de::Error::custom("Pasing error"))?;
+    let root = parse(tokens, reporter).map_err(|()| de::Error::custom("Pasing error"))?;
 
     from_taml(&Taml::Map(root))
 }
