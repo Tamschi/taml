@@ -90,7 +90,7 @@ enum BasicPathElementKey<'a, Position> {
 
 struct TabularPathSegment<'a, Position: Clone> {
     base: Vec<BasicPathElement<'a, Position>>,
-    multi: Option<Vec<TabularPathSegment<'a, Position>>>,
+    multi: Option<(Vec<TabularPathSegment<'a, Position>>, Range<Position>)>,
 }
 
 #[derive(Clone, Debug)]
@@ -119,7 +119,7 @@ impl<'a, Position> Hash for Key<'a, Position> {
 }
 impl<'a, Position, Rhs: AsRef<str> + ?Sized> PartialEq<Rhs> for Key<'a, Position> {
     fn eq(&self, other: &Rhs) -> bool {
-        self.as_ref() == other.as_ref()
+        self == other.as_ref()
     }
 }
 impl<'a, Position> Eq for Key<'a, Position> {}
@@ -160,7 +160,7 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
             self.base.iter().take(self.base.len() - 1).cloned(),
         )?;
 
-        let set_selection: Box<dyn FnOnce(Taml<Position>) -> &mut Taml<Position>> =
+        let selection: Box<dyn FnOnce(Taml<Position>) -> &mut Taml<Position>> =
             match &self.base.last().unwrap().key {
                 BasicPathElementKey::Plain(key) => match selection.entry(key.clone()) {
                     hash_map::Entry::Vacant(vacant) => Box::new(move |new| vacant.insert(new)),
@@ -190,26 +190,36 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
         //TODO: Report not enough values.
         if let Some(multi) = &self.multi {
             let selection = if let Some(variant) = variant {
-                match set_selection(Taml::StructuredVariant {
-                    variant: variant.clone(),
-                    fields: Map::new(),
+                match selection(Taml {
+                    span: variant.span.start.clone()..multi.1.end.clone(),
+                    value: TamlValue::EnumVariant {
+                        key: variant.clone(),
+                        payload: VariantPayload::Structured(Map::new()),
+                    },
                 }) {
-                    Taml::StructuredVariant { variant: _, fields } => fields,
+                    Taml {
+                        span: _,
+                        value:
+                            TamlValue::EnumVariant {
+                                key: _,
+                                payload: VariantPayload::Structured(fields),
+                            },
+                    } => fields,
                     _ => unreachable!(),
                 }
             } else {
-                match set_selection(Taml::Map(HashMap::new())) {
+                match selection(Taml::Map(HashMap::new())) {
                     Taml::Map(map) => map,
                     _ => unreachable!(),
                 }
             };
-            for child in multi {
+            for child in multi.0 {
                 child.assign(selection, values.by_ref())?
             }
             Ok(())
         } else {
             if let Some(variant) = variant {
-                set_selection(match values.next().ok_or(())? {
+                selection(match values.next().ok_or(())? {
                     Taml {
                         span,
                         value: TamlValue::List(list),
@@ -223,7 +233,7 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
                     _ => return Err(()), //TODO: Report
                 });
             } else {
-                set_selection(values.next().ok_or(())?);
+                selection(values.next().ok_or(())?);
             }
             Ok(())
         }
@@ -744,21 +754,25 @@ where
                 for path_element in base {
                     let map = selected;
                     let value = match &path_element.key {
-                        BasicPathElementKey::Plain(key) => map.get_mut(key.as_ref()),
+                        BasicPathElementKey::Plain(key) => &mut map.get_mut(&key).unwrap().value,
 
-                        BasicPathElementKey::List(key) => match map.get_mut(key.as_ref()) {
-                            Some(Taml::List(selected)) => selected.last_mut(),
-                            _ => unreachable!(),
-                        },
+                        BasicPathElementKey::List(key) => {
+                            match &mut map.get_mut(&key).unwrap().value {
+                                TamlValue::List(selected) => {
+                                    &mut selected.last_mut().unwrap().value
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
                     };
 
                     selected = match (value, path_element.variant.as_ref()) {
-                        (Some(Taml::Map(map)), None) => map,
+                        (TamlValue::Map(map), None) => map,
                         (
-                            Some(Taml::StructuredVariant {
-                                variant: existing_variant,
-                                fields,
-                            }),
+                            TamlValue::EnumVariant {
+                                key: existing_variant,
+                                payload: VariantPayload::Structured(fields),
+                            },
                             Some(expected_variant),
                         ) if existing_variant.as_ref() == expected_variant.as_ref() => fields,
                         _ => unreachable!(),
