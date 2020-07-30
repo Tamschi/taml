@@ -1,5 +1,6 @@
 //TODO: This entire file needs to have its types simplified.
 
+use std::{hash::Hash, ops::Deref};
 use {
     crate::{
         diagnostics::{
@@ -44,49 +45,93 @@ impl<'a, Position> IntoToken<'a, Position> for (lexerToken<'a>, Range<Position>)
 }
 
 #[derive(Debug)]
-pub enum Taml<'a> {
+pub struct Taml<'a, Position> {
+    pub value: TamlValue<'a, Position>,
+    pub span: Range<Position>,
+}
+
+#[derive(Debug)]
+pub enum TamlValue<'a, Position> {
     String(Woc<'a, String, str>),
     Integer(&'a str),
     Float(&'a str),
-    List(List<'a>),
-    Map(Map<'a>),
-    //TODO: Refactor these into a common variant.
-    StructuredVariant { variant: Key<'a>, fields: Map<'a> },
-    TupleVariant { variant: Key<'a>, values: List<'a> },
-    UnitVariant { variant: Key<'a> },
+    List(List<'a, Position>),
+    Map(Map<'a, Position>),
+    EnumVariant {
+        key: Key<'a, Position>,
+        payload: VariantPayload<'a, Position>,
+    },
 }
 
-struct PathSegment<'a> {
-    base: Vec<BasicPathElement<'a>>,
-    tabular: Option<TabularPathSegment<'a>>,
+#[derive(Debug)]
+pub enum VariantPayload<'a, Position> {
+    Structured(Map<'a, Position>),
+    Tuple(List<'a, Position>),
+    Unit,
+}
+
+struct PathSegment<'a, Position: Clone> {
+    base: Vec<BasicPathElement<'a, Position>>,
+    tabular: Option<TabularPathSegment<'a, Position>>,
 }
 
 #[derive(Clone)]
-struct BasicPathElement<'a> {
-    key: BasicPathElementKey<'a>,
-    variant: Option<Key<'a>>,
+struct BasicPathElement<'a, Position: Clone> {
+    key: BasicPathElementKey<'a, Position>,
+    variant: Option<Key<'a, Position>>,
+    span: Range<Position>,
 }
 
 #[derive(Clone)]
-enum BasicPathElementKey<'a> {
-    Plain(Key<'a>),
-    List(Key<'a>),
+enum BasicPathElementKey<'a, Position> {
+    Plain(Key<'a, Position>),
+    List(Key<'a, Position>),
 }
 
-struct TabularPathSegment<'a> {
-    base: Vec<BasicPathElement<'a>>,
-    multi: Option<Vec<TabularPathSegment<'a>>>,
+struct TabularPathSegment<'a, Position: Clone> {
+    base: Vec<BasicPathElement<'a, Position>>,
+    multi: Option<Vec<TabularPathSegment<'a, Position>>>,
 }
 
-pub type Key<'a> = Woc<'a, String, str>;
+#[derive(Clone, Debug)]
+pub struct Key<'a, Position> {
+    pub name: Woc<'a, String, str>,
+    pub span: Range<Position>,
+}
 
-pub type Map<'a> = HashMap<Key<'a>, Taml<'a>>;
-pub type MapIter<'iter, 'taml> = hash_map::Iter<'iter, Key<'taml>, Taml<'taml>>;
+impl<'a, Position> Deref for Key<'a, Position> {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        self.name.as_ref()
+    }
+}
 
-pub type List<'a> = Vec<Taml<'a>>;
-pub type ListIter<'iter, 'taml> = std::slice::Iter<'iter, Taml<'taml>>;
+impl<'a, Position> AsRef<str> for Key<'a, Position> {
+    fn as_ref(&self) -> &str {
+        self.name.as_ref()
+    }
+}
 
-impl<'a> TabularPathSegment<'a> {
+impl<'a, Position> Hash for Key<'a, Position> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state)
+    }
+}
+impl<'a, Position, Rhs: AsRef<str> + ?Sized> PartialEq<Rhs> for Key<'a, Position> {
+    fn eq(&self, other: &Rhs) -> bool {
+        self.as_ref() == other.as_ref()
+    }
+}
+impl<'a, Position> Eq for Key<'a, Position> {}
+
+pub type Map<'a, Position> = HashMap<Key<'a, Position>, Taml<'a, Position>>;
+pub type MapIter<'iter, 'taml, Position> =
+    hash_map::Iter<'iter, Key<'taml, Position>, Taml<'taml, Position>>;
+
+pub type List<'a, Position> = Vec<Taml<'a, Position>>;
+pub type ListIter<'iter, 'taml, Position> = std::slice::Iter<'iter, Taml<'taml, Position>>;
+
+impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
     fn arity(&self) -> usize {
         match &self.multi {
             None => 1,
@@ -96,8 +141,8 @@ impl<'a> TabularPathSegment<'a> {
 
     fn assign(
         &self,
-        selection: &mut Map<'a>,
-        values: &mut impl Iterator<Item = Taml<'a>>,
+        selection: &mut Map<'a, Position>,
+        values: &mut impl Iterator<Item = Taml<'a, Position>>,
     ) -> Result<(), ()> {
         if self.base.is_empty() && self.multi.is_none() {
             //TODO: Make sure these aren't accepted by the parser.
@@ -115,38 +160,45 @@ impl<'a> TabularPathSegment<'a> {
             self.base.iter().take(self.base.len() - 1).cloned(),
         )?;
 
-        let selection = match &self.base.last().unwrap().key {
-            BasicPathElementKey::Plain(key) => selection
-                .entry(key.clone())
-                .or_insert_with(|| Taml::String(Woc::Borrowed("PLACEHOLDER"))),
-            BasicPathElementKey::List(key) => {
-                let list = match selection
-                    .entry(key.clone())
-                    .or_insert_with(|| Taml::List(vec![]))
-                {
-                    Taml::List(list) => list,
-                    _ => unreachable!(),
-                };
-                list.push(Taml::String(Woc::Borrowed("PLACEHOLDER")));
-                list.last_mut().unwrap()
-            }
-        };
+        let set_selection: Box<dyn FnOnce(Taml<Position>) -> &mut Taml<Position>> =
+            match &self.base.last().unwrap().key {
+                BasicPathElementKey::Plain(key) => match selection.entry(key.clone()) {
+                    hash_map::Entry::Vacant(vacant) => Box::new(move |new| vacant.insert(new)),
+                    hash_map::Entry::Occupied(_) => unreachable!(),
+                },
+                BasicPathElementKey::List(key) => {
+                    let list = match selection
+                        .entry(key.clone())
+                        .or_insert_with(|| Taml {
+                            value: TamlValue::List(vec![]),
+                            span: self.base.last().unwrap().span.clone(),
+                        })
+                        .value
+                    {
+                        TamlValue::List(list) => list,
+                        _ => unreachable!(),
+                    };
+                    Box::new(move |new| {
+                        list.push(new);
+                        list.last_mut().unwrap()
+                    })
+                }
+            };
 
         let variant = self.base.last().unwrap().variant.as_ref();
 
+        //TODO: Report not enough values.
         if let Some(multi) = &self.multi {
             let selection = if let Some(variant) = variant {
-                *selection = Taml::StructuredVariant {
+                match set_selection(Taml::StructuredVariant {
                     variant: variant.clone(),
                     fields: Map::new(),
-                };
-                match selection {
+                }) {
                     Taml::StructuredVariant { variant: _, fields } => fields,
                     _ => unreachable!(),
                 }
             } else {
-                *selection = Taml::Map(HashMap::new());
-                match selection {
+                match set_selection(Taml::Map(HashMap::new())) {
                     Taml::Map(map) => map,
                     _ => unreachable!(),
                 }
@@ -157,15 +209,21 @@ impl<'a> TabularPathSegment<'a> {
             Ok(())
         } else {
             if let Some(variant) = variant {
-                *selection = Taml::TupleVariant {
-                    variant: variant.clone(),
-                    values: match values.next().ok_or(())? {
-                        Taml::List(list) => list,
-                        _ => return Err(()),
+                set_selection(match values.next().ok_or(())? {
+                    Taml {
+                        span,
+                        value: TamlValue::List(list),
+                    } => Taml {
+                        span,
+                        value: TamlValue::EnumVariant {
+                            key: variant.clone(),
+                            payload: VariantPayload::Tuple(list),
+                        },
                     },
-                }
+                    _ => return Err(()), //TODO: Report
+                });
             } else {
-                *selection = values.next().ok_or(())?;
+                set_selection(values.next().ok_or(())?);
             }
             Ok(())
         }
@@ -175,7 +233,7 @@ impl<'a> TabularPathSegment<'a> {
 pub fn parse<'a, Position: Clone>(
     iter: impl IntoIterator<Item = impl IntoToken<'a, Position>>,
     reporter: &mut impl Reporter<Position>,
-) -> Result<Map<'a>, ()> {
+) -> Result<Map<'a, Position>, ()> {
     let mut iter = iter.into_iter().map(|t| t.into_token()).peekable();
 
     let mut taml = Map::new();
@@ -340,7 +398,7 @@ pub fn parse<'a, Position: Clone>(
 fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
     reporter: &mut impl Reporter<Position>,
-) -> Result<PathSegment<'a>, ()> {
+) -> Result<PathSegment<'a, Position>, ()> {
     let mut base = vec![];
     let mut tabular = None;
 
@@ -494,7 +552,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
 fn parse_tabular_path_segments<'a, Position: Clone>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
     reporter: &mut impl Reporter<Position>,
-) -> Result<Vec<TabularPathSegment<'a>>, ()> {
+) -> Result<Vec<TabularPathSegment<'a, Position>>, ()> {
     let mut segments = vec![];
     while !matches!(
         iter.peek().map(|t| &t.token),
@@ -513,7 +571,7 @@ fn parse_tabular_path_segments<'a, Position: Clone>(
 fn parse_tabular_path_segment<'a, Position: Clone>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
     reporter: &mut impl Reporter<Position>,
-) -> Result<TabularPathSegment<'a>, ()> {
+) -> Result<TabularPathSegment<'a, Position>, ()> {
     let mut base = vec![];
     let mut multi = None;
     loop {
@@ -667,10 +725,10 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
     Ok(TabularPathSegment { base, multi })
 }
 
-fn get_last_mut<'a, 'b, 'c>(
-    mut selected: &'a mut Map<'b>,
-    path: impl IntoIterator<Item = &'c PathSegment<'b>>,
-) -> &'a mut Map<'b>
+fn get_last_mut<'a, 'b, 'c, Position: Clone + 'c>(
+    mut selected: &'a mut Map<'b, Position>,
+    path: impl IntoIterator<Item = &'c PathSegment<'b, Position>>,
+) -> &'a mut Map<'b, Position>
 where
     'b: 'c,
 {
@@ -713,10 +771,10 @@ where
     selected
 }
 
-fn instantiate<'a, 'b>(
-    mut selection: &'a mut Map<'b>,
-    path: impl IntoIterator<Item = BasicPathElement<'b>>,
-) -> Result<&'a mut Map<'b>, ()> {
+fn instantiate<'a, 'b, Position: Clone>(
+    mut selection: &'a mut Map<'b, Position>,
+    path: impl IntoIterator<Item = BasicPathElement<'b, Position>>,
+) -> Result<&'a mut Map<'b, Position>, ()> {
     for path_element in path {
         selection = match path_element.key {
             BasicPathElementKey::Plain(key) => {
@@ -771,13 +829,17 @@ fn instantiate<'a, 'b>(
 fn parse_key_value_pair<'a, Position: Clone>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
     reporter: &mut impl Reporter<Position>,
-) -> Result<((Key<'a>, Range<Position>), Taml<'a>), ()> {
+) -> Result<(Key<'a, Position>, Taml<'a, Position>), ()> {
     Ok(match iter.peek().map(|t| &t.token) {
         Some(lexerToken::Identifier(_)) => match iter.next().unwrap() {
             Token {
-                token: lexerToken::Identifier(key),
+                token: lexerToken::Identifier(key_name),
                 span: key_span,
             } => {
+                let key = Key {
+                    name: key_name,
+                    span: key_span,
+                };
                 if matches!(
                     iter.peek(),
                     Some(&Token {
@@ -797,7 +859,7 @@ fn parse_key_value_pair<'a, Position: Clone>(
                     });
                     return Err(());
                 }
-                ((key, key_span), parse_value(iter, reporter)?)
+                (key, parse_value(iter, reporter)?)
             }
             _ => unreachable!(),
         },
@@ -820,7 +882,7 @@ fn parse_values_line<'a, Position: Clone>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
     count: usize,
     reporter: &mut impl Reporter<Position>,
-) -> Result<Vec<Taml<'a>>, ()> {
+) -> Result<Vec<Taml<'a, Position>>, ()> {
     let mut values = vec![];
     values.push(parse_value(iter, reporter)?);
     for _ in 1..count {
@@ -848,11 +910,11 @@ fn parse_values_line<'a, Position: Clone>(
 fn parse_value<'a, Position: Clone>(
     iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
     reporter: &mut impl Reporter<Position>,
-) -> Result<Taml<'a>, ()> {
+) -> Result<Taml<'a, Position>, ()> {
     fn err<'a, Position>(
         span: impl Into<Option<Range<Position>>>,
         reporter: &mut impl Reporter<Position>,
-    ) -> Result<Taml<'a>, ()> {
+    ) -> Result<Taml<'a, Position>, ()> {
         reporter.report_with(|| Diagnostic {
             r#type: DiagnosticType::ExpectedValue,
             labels: vec![DiagnosticLabel::new(
@@ -865,8 +927,8 @@ fn parse_value<'a, Position: Clone>(
     }
 
     if let Some(Token { token, span }) = iter.next() {
-        Ok(match token {
-            lexerToken::Paren => {
+        Ok(match (token, span) {
+            (lexerToken::Paren, paren_span) => {
                 let mut items = vec![];
                 while iter.peek().map(|t| &t.token) != Some(&lexerToken::Thesis) {
                     if matches!(iter.peek().map(|t| &t.token), None| Some(&lexerToken::Comment(_))| Some(&lexerToken::Newline))
@@ -884,8 +946,12 @@ fn parse_value<'a, Position: Clone>(
                     }
                 }
                 if iter.peek().map(|t| &t.token) == Some(&lexerToken::Thesis) {
-                    assert_eq!(iter.next().unwrap().token, lexerToken::Thesis);
-                    Taml::List(items)
+                    let thesis = iter.next().unwrap();
+                    assert_eq!(thesis.token, lexerToken::Thesis);
+                    Taml {
+                        value: TamlValue::List(items),
+                        span: paren_span.start..thesis.span.end,
+                    }
                 } else {
                     reporter.report_with(|| Diagnostic {
                         r#type: DiagnosticType::UnclosedList,
@@ -906,20 +972,49 @@ fn parse_value<'a, Position: Clone>(
                 }
             }
 
-            lexerToken::String(str) => Taml::String(str),
-            lexerToken::Float(str) => Taml::Float(str),
-            lexerToken::Integer(str) => Taml::Integer(str),
-            lexerToken::Identifier(str) => {
+            (lexerToken::String(str), span) => Taml {
+                value: TamlValue::String(str),
+                span,
+            },
+            (lexerToken::Float(str), span) => Taml {
+                value: TamlValue::Float(str),
+                span,
+            },
+            (lexerToken::Integer(str), span) => Taml {
+                value: TamlValue::Integer(str),
+                span,
+            },
+
+            // Enum variant
+            (lexerToken::Identifier(str), key_span) => {
                 if iter.peek().map(|t| &t.token) == Some(&lexerToken::Paren) {
                     match parse_value(iter, reporter)? {
-                        Taml::List(list) => Taml::TupleVariant {
-                            variant: str,
-                            values: list,
+                        Taml {
+                            span: list_span,
+                            value: TamlValue::List(list),
+                        } => Taml {
+                            span: key_span.start.clone()..list_span.end,
+                            value: TamlValue::EnumVariant {
+                                key: Key {
+                                    name: str,
+                                    span: key_span,
+                                },
+                                payload: VariantPayload::Tuple(list),
+                            },
                         },
                         _ => unreachable!(),
                     }
                 } else {
-                    Taml::UnitVariant { variant: str }
+                    Taml {
+                        span: key_span.clone(),
+                        value: TamlValue::EnumVariant {
+                            key: Key {
+                                name: str,
+                                span: key_span,
+                            },
+                            payload: VariantPayload::Unit,
+                        },
+                    }
                 }
             }
 
