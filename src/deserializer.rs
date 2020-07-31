@@ -150,12 +150,51 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
     for Deserializer<'a, 'de, Position, Reporter>
 {
     type Error = Error;
-    fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value>
+
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!("any {}", std::any::type_name::<V::Value>())
+        match &self.0.value {
+            TamlValue::String(_) => self.deserialize_str(visitor),
+            TamlValue::Integer(str) => {
+                if let Ok(u8) = str.parse::<u8>() {
+                    visitor.visit_u8(u8)
+                } else if let Ok(u16) = str.parse::<u16>() {
+                    visitor.visit_u16(u16)
+                } else if let Ok(u32) = str.parse::<u32>() {
+                    visitor.visit_u32(u32)
+                } else if let Ok(u64) = str.parse::<u64>() {
+                    visitor.visit_u64(u64)
+                } else if let Ok(u128) = str.parse::<u128>() {
+                    visitor.visit_u128(u128)
+                } else if let Ok(i8) = str.parse::<i8>() {
+                    visitor.visit_i8(i8)
+                } else if let Ok(i16) = str.parse::<i16>() {
+                    visitor.visit_i16(i16)
+                } else if let Ok(i32) = str.parse::<i32>() {
+                    visitor.visit_i32(i32)
+                } else if let Ok(i64) = str.parse::<i64>() {
+                    visitor.visit_i64(i64)
+                } else if let Ok(i128) = str.parse::<i128>() {
+                    visitor.visit_i128(i128)
+                } else {
+                    Err(invalid_value(self.0, &visitor))
+                }
+            }
+            TamlValue::Float(_) => self.deserialize_f64(visitor),
+            TamlValue::List(_) => self.deserialize_seq(visitor),
+            TamlValue::Map(_) => self.deserialize_map(visitor),
+            TamlValue::EnumVariant { key, payload } => {
+                self.deserialize_enum(
+                    "",  // Ignored.
+                    &[], // Ignored.
+                    visitor,
+                )
+            }
+        }
     }
+
     fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
