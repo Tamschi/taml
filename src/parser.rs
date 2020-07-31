@@ -208,46 +208,52 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
             reporter,
         )?;
 
-        let selection: Box<dyn FnOnce(Taml<Position>) -> &mut Taml<Position>> =
-            match &self.base.last().unwrap().key {
-                BasicPathElementKey::Plain(key) => match selection.entry(key.clone()) {
-                    hash_map::Entry::Vacant(vacant) => Box::new(|new| vacant.insert(new)),
-                    hash_map::Entry::Occupied(_) => unreachable!(),
-                },
-                BasicPathElementKey::List { key, span } => {
-                    let list = selection
-                        .entry(key.clone())
-                        .or_insert_with(|| Taml {
-                            value: TamlValue::List(vec![]),
-                            span: span.clone(),
-                        })
-                        .unwrap_list_mut();
-                    Box::new(move |new| {
-                        list.push(new);
-                        list.last_mut().unwrap()
-                    })
+        fn placeholder<'a, Position: Clone>(position: Position) -> Taml<'a, Position> {
+            Taml {
+                span: position.clone()..position,
+                value: TamlValue::String(Woc::Borrowed("PLACEHOLDER")),
+            }
+        }
+
+        let selection: &mut Taml<'a, Position> = match &self.base.last().unwrap().key {
+            BasicPathElementKey::Plain(key) => match selection.entry(key.clone()) {
+                hash_map::Entry::Vacant(vacant) => {
+                    vacant.insert(placeholder(key.span.start.clone()))
                 }
-            };
+                hash_map::Entry::Occupied(_) => unreachable!(),
+            },
+            BasicPathElementKey::List { key, span } => {
+                let list = selection
+                    .entry(key.clone())
+                    .or_insert_with(|| Taml {
+                        value: TamlValue::List(vec![]),
+                        span: span.clone(),
+                    })
+                    .unwrap_list_mut();
+                list.push(placeholder(span.start.clone()));
+                list.last_mut().unwrap()
+            }
+        };
 
         let variant = self.base.last().unwrap().variant.as_ref();
 
         //TODO: Report not enough values.
         if let Some(multi) = &self.multi {
             let selection = if let Some(variant) = variant {
-                selection(Taml {
+                *selection = Taml {
                     span: variant.span.start.clone()..multi.1.end.clone(),
                     value: TamlValue::EnumVariant {
                         key: variant.clone(),
                         payload: VariantPayload::Structured(Map::new()),
                     },
-                })
-                .unwrap_variant_structured_mut()
+                };
+                selection.unwrap_variant_structured_mut()
             } else {
-                selection(Taml {
+                *selection = Taml {
                     span: multi.1.clone(),
                     value: TamlValue::Map(HashMap::new()),
-                })
-                .unwrap_map_mut()
+                };
+                selection.unwrap_map_mut()
             };
             for child in multi.0 {
                 child.assign(selection, values.by_ref(), reporter)?
@@ -255,7 +261,7 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
             Ok(())
         } else {
             if let Some(variant) = variant {
-                selection(match values.next().ok_or(())? {
+                *selection = match values.next().ok_or(())? {
                     Taml {
                         span,
                         value: TamlValue::List(list),
@@ -267,9 +273,9 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
                         },
                     },
                     _ => return Err(()), //TODO: Report
-                });
+                };
             } else {
-                selection(values.next().ok_or(())?);
+                *selection = values.next().ok_or(())?;
             }
             Ok(())
         }
