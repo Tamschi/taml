@@ -5,3 +5,4 @@
 *.taml text eol=lf
 
 Cargo.toml text eol=lf
+TODO text eol=lf
