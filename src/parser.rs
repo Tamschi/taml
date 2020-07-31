@@ -165,7 +165,7 @@ impl<'a, Position> Hash for Key<'a, Position> {
 }
 impl<'a, Position, Rhs: AsRef<str> + ?Sized> PartialEq<Rhs> for Key<'a, Position> {
     fn eq(&self, other: &Rhs) -> bool {
-        self == other.as_ref()
+        self.as_ref() == other.as_ref()
     }
 }
 impl<'a, Position> Eq for Key<'a, Position> {}
