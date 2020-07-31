@@ -77,6 +77,23 @@ fn invalid_type<'de, Position>(unexp: &'de Taml<'de, Position>, exp: &dyn de::Ex
     )
 }
 
+fn invalid_variant_type<'de, Position>(
+    unexp: &'de VariantPayload<'de, Position>,
+    exp: &dyn de::Expected,
+) -> Error {
+    de::Error::invalid_type(
+        match &unexp {
+            VariantPayload::Structured(_) => de::Unexpected::StructVariant,
+            VariantPayload::Tuple(values) => match values.len() {
+                1 => de::Unexpected::NewtypeVariant,
+                _ => de::Unexpected::TupleVariant,
+            },
+            VariantPayload::Unit => de::Unexpected::UnitVariant,
+        },
+        exp,
+    )
+}
+
 fn invalid_value<'de, Position>(unexp: &'de Taml<'de, Position>, exp: &dyn de::Expected) -> Error {
     de::Error::invalid_value(
         match &unexp.value {
@@ -347,7 +364,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
             fn unit_variant(self) -> Result<()> {
                 match self.0 {
                     VariantPayload::Unit => Ok(()),
-                    _ => Err(invalid_type(self.0, &"unit variant")),
+                    _ => Err(invalid_variant_type(self.0, &"unit variant")),
                 }
             }
 
@@ -363,7 +380,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
                         values.len(),
                         &"tuple variant of length 1",
                     )),
-                    _ => Err(invalid_type(self.0, &"tuple variant of length 1")),
+                    _ => Err(invalid_variant_type(self.0, &"tuple variant of length 1")),
                 }
             }
 
@@ -378,7 +395,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
                     VariantPayload::Tuple(values) => {
                         Err(de::Error::invalid_length(values.len(), &visitor))
                     }
-                    _ => Err(invalid_type(self.0, &visitor)),
+                    _ => Err(invalid_variant_type(self.0, &visitor)),
                 }
             }
 
@@ -394,7 +411,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
                     VariantPayload::Structured(fields) => {
                         de::Deserializer::deserialize_map(MapDeserializer(fields, self.1), visitor)
                     }
-                    _ => Err(invalid_type(self.0, &visitor)),
+                    _ => Err(invalid_variant_type(self.0, &visitor)),
                 }
             }
         }

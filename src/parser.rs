@@ -50,6 +50,32 @@ pub struct Taml<'a, Position> {
     pub span: Range<Position>,
 }
 
+impl<'a, Position> Taml<'a, Position> {
+    fn unwrap_list_mut(&mut self) -> &mut List<'a, Position> {
+        match &mut self.value {
+            TamlValue::List(list) => list,
+            _ => panic!("Expected list."),
+        }
+    }
+
+    fn unwrap_map_mut(&mut self) -> &mut Map<'a, Position> {
+        match &mut self.value {
+            TamlValue::Map(map) => map,
+            _ => panic!("Expected map."),
+        }
+    }
+
+    fn unwrap_variant_structured_mut(&mut self) -> &mut Map<'a, Position> {
+        match &mut self.value {
+            TamlValue::EnumVariant {
+                key: _,
+                payload: VariantPayload::Structured(map),
+            } => map,
+            _ => panic!("Expected structured variant."),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum TamlValue<'a, Position> {
     String(Woc<'a, String, str>),
@@ -155,7 +181,7 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
     fn arity(&self) -> usize {
         match &self.multi {
             None => 1,
-            Some(multi) => multi.iter().map(Self::arity).sum(),
+            Some(multi) => multi.0.iter().map(Self::arity).sum(),
         }
     }
 
@@ -163,13 +189,14 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
         &self,
         selection: &mut Map<'a, Position>,
         values: &mut impl Iterator<Item = Taml<'a, Position>>,
+        reporter: &mut impl Reporter<Position>,
     ) -> Result<(), ()> {
         if self.base.is_empty() && self.multi.is_none() {
             //TODO: Make sure these aren't accepted by the parser.
             unreachable!("Completely empty tabular path segments are invalid.")
         } else if self.base.is_empty() {
-            for child in self.multi.as_ref().unwrap() {
-                child.assign(selection, values)?
+            for child in self.multi.as_ref().unwrap().0 {
+                child.assign(selection, values, reporter)?
             }
 
             return Ok(());
@@ -178,6 +205,7 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
         let selection = instantiate(
             selection,
             self.base.iter().take(self.base.len() - 1).cloned(),
+            reporter,
         )?;
 
         let selection: Box<dyn FnOnce(Taml<Position>) -> &mut Taml<Position>> =
@@ -187,17 +215,13 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
                     hash_map::Entry::Occupied(_) => unreachable!(),
                 },
                 BasicPathElementKey::List { key, span } => {
-                    let list = match selection
+                    let list = selection
                         .entry(key.clone())
                         .or_insert_with(|| Taml {
                             value: TamlValue::List(vec![]),
                             span: span.clone(),
                         })
-                        .value
-                    {
-                        TamlValue::List(list) => list,
-                        _ => unreachable!(),
-                    };
+                        .unwrap_list_mut();
                     Box::new(move |new| {
                         list.push(new);
                         list.last_mut().unwrap()
@@ -210,31 +234,23 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
         //TODO: Report not enough values.
         if let Some(multi) = &self.multi {
             let selection = if let Some(variant) = variant {
-                match selection(Taml {
+                selection(Taml {
                     span: variant.span.start.clone()..multi.1.end.clone(),
                     value: TamlValue::EnumVariant {
                         key: variant.clone(),
                         payload: VariantPayload::Structured(Map::new()),
                     },
-                }) {
-                    Taml {
-                        span: _,
-                        value:
-                            TamlValue::EnumVariant {
-                                key: _,
-                                payload: VariantPayload::Structured(fields),
-                            },
-                    } => fields,
-                    _ => unreachable!(),
-                }
+                })
+                .unwrap_variant_structured_mut()
             } else {
-                match selection(Taml::Map(HashMap::new())) {
-                    Taml::Map(map) => map,
-                    _ => unreachable!(),
-                }
+                selection(Taml {
+                    span: multi.1.clone(),
+                    value: TamlValue::Map(HashMap::new()),
+                })
+                .unwrap_map_mut()
             };
             for child in multi.0 {
-                child.assign(selection, values.by_ref())?
+                child.assign(selection, values.by_ref(), reporter)?
             }
             Ok(())
         } else {
@@ -331,7 +347,7 @@ pub fn parse<'a, Position: Clone>(
 
                 if path
                     .last()
-                    .and_then(|s: &PathSegment| s.tabular.as_ref())
+                    .and_then(|s: &PathSegment<Position>| s.tabular.as_ref())
                     .is_some()
                 {
                     reporter.report_with(|| Diagnostic {
@@ -355,6 +371,7 @@ pub fn parse<'a, Position: Clone>(
                 selection = match instantiate(
                     get_last_mut(&mut taml, path.iter()),
                     new_segment.base.iter().cloned(),
+                    reporter,
                 ) {
                     Ok(selection) => selection,
                     Err(()) => return Err(()),
@@ -363,13 +380,14 @@ pub fn parse<'a, Position: Clone>(
                 if let Some(tabular) = new_segment.tabular.as_ref() {
                     // Create lists for empty headings too.
                     if let BasicPathElement {
-                        key: BasicPathElementKey::List(key),
+                        key: BasicPathElementKey::List { key, span },
                         variant: _,
                     } = tabular.base.first().unwrap()
                     {
-                        selection
-                            .entry(key.clone())
-                            .or_insert_with(|| Taml::List(List::new()));
+                        selection.entry(key.clone()).or_insert_with(|| Taml {
+                            span: span.clone(),
+                            value: TamlValue::List(List::new()),
+                        });
                     } else {
                         unreachable!()
                     }
@@ -391,11 +409,12 @@ pub fn parse<'a, Position: Clone>(
                             Err(()) => return Err(()),
                         };
 
-                        if let Err(()) = tabular.assign(selection, &mut values.drain(..)) {
+                        let values = values.into_iter();
+                        if let Err(()) = tabular.assign(selection, &mut values, reporter) {
                             return Err(());
                         };
 
-                        assert!(values.is_empty());
+                        assert!(values.next().is_none());
                     }
                     None => {
                         let ((key, key_span), value) =
@@ -634,9 +653,15 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
             }
 
             //TODO: Deduplicate the code
-            Some(lexerToken::Identifier(_)) => match iter.next().unwrap().token {
-                lexerToken::Identifier(str) => base.push(BasicPathElement {
-                    key: BasicPathElementKey::Plain(str),
+            Some(lexerToken::Identifier(_)) => match iter.next().unwrap() {
+                Token {
+                    span,
+                    token: lexerToken::Identifier(key_name),
+                } => base.push(BasicPathElement {
+                    key: BasicPathElementKey::Plain(Key {
+                        name: key_name,
+                        span,
+                    }),
                     variant: if iter.peek().map(|t| &t.token) == Some(&lexerToken::Colon) {
                         assert_eq!(iter.next().unwrap().token, lexerToken::Colon);
                         if !matches!(
@@ -653,8 +678,14 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                             });
                             return Err(());
                         }
-                        match iter.next().unwrap().token {
-                            lexerToken::Identifier(str) => Some(str),
+                        match iter.next().unwrap() {
+                            Token {
+                                span,
+                                token: lexerToken::Identifier(variant_name),
+                            } => Some(Key {
+                                name: variant_name,
+                                span,
+                            }),
                             _ => unreachable!(),
                         }
                     } else {
@@ -665,13 +696,22 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
             },
 
             Some(lexerToken::Brac) => {
-                assert_eq!(iter.next().unwrap().token, lexerToken::Brac);
+                let brac_start = {
+                    let brac = iter.next().unwrap();
+                    assert_eq!(brac.token, lexerToken::Brac);
+                    brac.span.start
+                };
                 match iter.peek().map(|t| &t.token) {
-                    Some(lexerToken::Identifier(_)) => match iter.next().unwrap().token {
-                        lexerToken::Identifier(str) => {
-                            match iter.peek().map(|t| &t.token) {
+                    Some(lexerToken::Identifier(_)) => match iter.next().unwrap() {
+                        Token {
+                            span: str_span,
+                            token: lexerToken::Identifier(str),
+                        } => {
+                            let ket_end = match iter.peek().map(|t| &t.token) {
                                 Some(lexerToken::Ket) => {
-                                    assert_eq!(iter.next().unwrap().token, lexerToken::Ket)
+                                    let ket = iter.next().unwrap();
+                                    assert_eq!(ket.token, lexerToken::Ket);
+                                    ket.span.end
                                 }
                                 _ => {
                                     reporter.report_with(|| Diagnostic {
@@ -686,7 +726,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                                 }
                             };
                             base.push(BasicPathElement {
-                                key: BasicPathElementKey::List(str),
+                                key: BasicPathElementKey::List{key: Key{name: str, span: str_span} , span: brac_start..ket_end},
                                 variant: if iter.peek().map(|t| &t.token)
                                     == Some(&lexerToken::Colon)
                                 {
@@ -695,11 +735,11 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                                         iter.peek().map(|t| &t.token),
                                         Some(lexerToken::Identifier(_))
                                     ) {
-                                        match iter.next().unwrap().token {
-                                            lexerToken::Identifier(str) => Some(str),
+                                        match iter.next().unwrap() {
+                                            Token{span, token:lexerToken::Identifier(str)} => Some(Key{name: str, span}),
                                             _ => unreachable!(),
                                         }
-                                    }else{
+                                    } else {
                                         reporter.report_with(||Diagnostic {
                                             r#type: DiagnosticType::MissingVariantIdentifier,
                                             labels: vec![DiagnosticLabel::new(
@@ -776,7 +816,7 @@ where
                     let value = match &path_element.key {
                         BasicPathElementKey::Plain(key) => &mut map.get_mut(&key).unwrap().value,
 
-                        BasicPathElementKey::List(key) => {
+                        BasicPathElementKey::List { key, .. } => {
                             match &mut map.get_mut(&key).unwrap().value {
                                 TamlValue::List(selected) => {
                                     &mut selected.last_mut().unwrap().value
@@ -787,14 +827,14 @@ where
                     };
 
                     selected = match (value, path_element.variant.as_ref()) {
-                        (TamlValue::Map(map), None) => map,
+                        (TamlValue::Map(map), None) => &mut map,
                         (
                             TamlValue::EnumVariant {
                                 key: existing_variant,
                                 payload: VariantPayload::Structured(fields),
                             },
                             Some(expected_variant),
-                        ) if existing_variant.as_ref() == expected_variant.as_ref() => fields,
+                        ) if existing_variant == expected_variant => &mut fields,
                         _ => unreachable!(),
                     };
                 }
@@ -808,51 +848,90 @@ where
 fn instantiate<'a, 'b, Position: Clone>(
     mut selection: &'a mut Map<'b, Position>,
     path: impl IntoIterator<Item = BasicPathElement<'b, Position>>,
+    reporter: &mut impl Reporter<Position>,
 ) -> Result<&'a mut Map<'b, Position>, ()> {
     for path_element in path {
         selection = match path_element.key {
             BasicPathElementKey::Plain(key) => {
                 let entry = selection.entry(key.clone());
-                let taml = match (entry, path_element.variant) {
-                    (hash_map::Entry::Occupied(occupied), None) => occupied.into_mut(),
-                    (hash_map::Entry::Occupied(_), Some(_)) => return Err(()),
-                    (hash_map::Entry::Vacant(vacant), None) => vacant.insert(Taml::Map(Map::new())),
-                    (hash_map::Entry::Vacant(vacant), Some(variant)) => {
-                        vacant.insert(Taml::StructuredVariant {
-                            variant,
-                            fields: Map::new(),
-                        })
-                    }
-                };
-                match taml {
-                    Taml::Map(map) => map,
-                    _ => return Err(()),
-                }
-            }
-            BasicPathElementKey::List(key) => {
-                let list = selection
-                    .entry(key.clone())
-                    .or_insert_with(|| Taml::List(vec![]));
-                match list {
-                    Taml::List(list) => {
-                        if let Some(variant) = path_element.variant {
-                            list.push(Taml::StructuredVariant {
-                                variant,
-                                fields: Map::new(),
+                match (entry, path_element.variant) {
+                    (hash_map::Entry::Occupied(occupied), None) => {
+                        match occupied.get_mut() {
+                            Taml {
+                                span: _,
+                                value: TamlValue::Map(map),
+                            } => map,
+                            Taml { span, .. } => {
+                                reporter.report_with(|| Diagnostic {
+                                r#type: DiagnosticType::NonMapValueSelected,
+                                labels: vec![DiagnosticLabel::new(
+                                    "This key is assigned something other than a map here...",
+                                    span.clone(),
+                                    DiagnosticLabelPriority::Auxiliary,
+                                ),DiagnosticLabel::new("...but is selected as map here.", path_element.span(), DiagnosticLabelPriority::Primary,)],
                             });
-                            match list.last_mut().unwrap() {
-                                Taml::StructuredVariant { fields, .. } => fields,
-                                _ => unreachable!(),
-                            }
-                        } else {
-                            list.push(Taml::Map(Map::new()));
-                            match list.last_mut().unwrap() {
-                                Taml::Map(map) => map,
-                                _ => unreachable!(),
+                                return Err(());
                             }
                         }
                     }
-                    _ => unreachable!(),
+                    (hash_map::Entry::Occupied(occupied), Some(_)) => {
+                        reporter.report_with(|| Diagnostic {
+                            r#type: DiagnosticType::DuplicateEnumInstantiation,
+                            labels: vec![
+                                DiagnosticLabel::new(
+                                    "This enum value has already been assigned here...",
+                                    occupied.get().span.clone(),
+                                    DiagnosticLabelPriority::Auxiliary,
+                                ),
+                                DiagnosticLabel::new(
+                                    "...but another value is instantiated here.",
+                                    path_element.span(),
+                                    DiagnosticLabelPriority::Primary,
+                                ),
+                            ],
+                        });
+                        return Err(());
+                    }
+                    (hash_map::Entry::Vacant(vacant), None) => vacant
+                        .insert(Taml {
+                            span: path_element.span(),
+                            value: TamlValue::Map(Map::new()),
+                        })
+                        .unwrap_map_mut(),
+                    (hash_map::Entry::Vacant(vacant), Some(variant)) => vacant
+                        .insert(Taml {
+                            span: path_element.span(),
+                            value: TamlValue::EnumVariant {
+                                key: variant,
+                                payload: VariantPayload::Structured(Map::new()),
+                            },
+                        })
+                        .unwrap_variant_structured_mut(),
+                }
+            }
+            BasicPathElementKey::List { key, span } => {
+                let list = selection
+                    .entry(key.clone())
+                    .or_insert_with(|| Taml {
+                        span,
+                        value: TamlValue::List(vec![]),
+                    })
+                    .unwrap_list_mut();
+                if let Some(variant) = path_element.variant {
+                    list.push(Taml {
+                        span: variant.span,
+                        value: TamlValue::EnumVariant {
+                            key: variant,
+                            payload: VariantPayload::Structured(Map::new()),
+                        },
+                    });
+                    list.last_mut().unwrap().unwrap_variant_structured_mut()
+                } else {
+                    list.push(Taml {
+                        span,
+                        value: TamlValue::Map(Map::new()),
+                    });
+                    list.last_mut().unwrap().unwrap_map_mut()
                 }
             }
         };

@@ -143,6 +143,20 @@ enum_properties! {
             level: DiagnosticLevel::Error,
             title: "Unclosed tabular path section",
         },
+
+        DuplicateEnumInstantiation {
+            group: DiagnosticGroup::Parsing,
+            code: 15,
+            level: DiagnosticLevel::Error,
+            title: "Duplicate enum instantiation",
+        },
+
+        NonMapValueSelected {
+            group: DiagnosticGroup::Parsing,
+            code: 16,
+            level: DiagnosticLevel::Error,
+            title: "Non-map value selected",
+        },
     }
 }
 
