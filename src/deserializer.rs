@@ -1,3 +1,5 @@
+//TODO: Add secondary labels without caption while unrolling due to error. Disarm/return `Ok(())` with  `.void()` on that guard.
+
 use {
     crate::{
         diagnostics::Reporter as diagReporter,

@@ -79,13 +79,33 @@ struct PathSegment<'a, Position: Clone> {
 struct BasicPathElement<'a, Position: Clone> {
     key: BasicPathElementKey<'a, Position>,
     variant: Option<Key<'a, Position>>,
-    span: Range<Position>,
+}
+
+impl<'a, Position: Clone> BasicPathElement<'a, Position> {
+    fn span(&self) -> Range<Position> {
+        self.variant.map_or_else(
+            || self.key.span().clone(),
+            |variant| self.key.span().start.clone()..variant.span.end.clone(),
+        )
+    }
 }
 
 #[derive(Clone)]
 enum BasicPathElementKey<'a, Position> {
     Plain(Key<'a, Position>),
-    List(Key<'a, Position>),
+    List {
+        key: Key<'a, Position>,
+        span: Range<Position>,
+    },
+}
+
+impl<'a, Position> BasicPathElementKey<'a, Position> {
+    fn span(&self) -> &Range<Position> {
+        match self {
+            BasicPathElementKey::Plain(key) => &key.span,
+            BasicPathElementKey::List { span, .. } => span,
+        }
+    }
 }
 
 struct TabularPathSegment<'a, Position: Clone> {
@@ -166,12 +186,12 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
                     hash_map::Entry::Vacant(vacant) => Box::new(move |new| vacant.insert(new)),
                     hash_map::Entry::Occupied(_) => unreachable!(),
                 },
-                BasicPathElementKey::List(key) => {
+                BasicPathElementKey::List { key, span } => {
                     let list = match selection
                         .entry(key.clone())
                         .or_insert_with(|| Taml {
                             value: TamlValue::List(vec![]),
-                            span: self.base.last().unwrap().span.clone(),
+                            span: span.clone(),
                         })
                         .value
                     {
