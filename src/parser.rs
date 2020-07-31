@@ -1,6 +1,5 @@
 //TODO: This entire file needs to have its types simplified.
 
-use std::{hash::Hash, ops::Deref};
 use {
     crate::{
         diagnostics::{
@@ -11,8 +10,9 @@ use {
     smartstring::alias::String,
     std::{
         collections::{hash_map, HashMap},
+        hash::Hash,
         iter::{self, Peekable},
-        ops::Range,
+        ops::{Deref, Range},
     },
     woc::Woc,
 };

@@ -16,7 +16,44 @@ struct Deserializer<'a, 'de, Position, Reporter: diagReporter<Position>>(
     &'a mut Reporter,
 );
 
-pub type Error = de::value::Error;
+#[derive(Debug, PartialEq, Eq)]
+pub struct Error;
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Error")
+    }
+}
+impl std::error::Error for Error {}
+impl de::Error for Error {
+    fn custom<T>(_msg: T) -> Self
+    where
+        T: std::fmt::Display,
+    {
+        Self
+    }
+    fn invalid_type(_unexp: de::Unexpected, _exp: &dyn de::Expected) -> Self {
+        Self
+    }
+    fn invalid_value(_unexp: de::Unexpected, _exp: &dyn de::Expected) -> Self {
+        Self
+    }
+    fn invalid_length(_len: usize, _exp: &dyn de::Expected) -> Self {
+        Self
+    }
+    fn unknown_variant(_variant: &str, _expected: &'static [&'static str]) -> Self {
+        Self
+    }
+    fn unknown_field(_field: &str, _expected: &'static [&'static str]) -> Self {
+        Self
+    }
+    fn missing_field(_field: &'static str) -> Self {
+        Self
+    }
+    fn duplicate_field(_field: &'static str) -> Self {
+        Self
+    }
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[allow(clippy::missing_errors_doc)]
@@ -54,69 +91,6 @@ pub fn from_taml<'de, T: de::Deserialize<'de>, Position>(
     T::deserialize(Deserializer(&taml, reporter))
 }
 
-fn invalid_type<'de, Position>(unexp: &'de Taml<'de, Position>, exp: &dyn de::Expected) -> Error {
-    de::Error::invalid_type(
-        match &unexp.value {
-            TamlValue::String(str) => de::Unexpected::Str(str),
-            TamlValue::Integer(_) => de::Unexpected::Other("integer"), //TODO
-            TamlValue::Float(str) => str
-                .parse()
-                .map_or_else(|_| de::Unexpected::Other(str), de::Unexpected::Float),
-            TamlValue::List(_) => de::Unexpected::Seq,
-            TamlValue::Map(_) => de::Unexpected::Map,
-            TamlValue::EnumVariant { payload, .. } => match payload {
-                VariantPayload::Structured(_) => de::Unexpected::StructVariant,
-                VariantPayload::Tuple(values) => match values.len() {
-                    1 => de::Unexpected::NewtypeVariant,
-                    _ => de::Unexpected::TupleVariant,
-                },
-                VariantPayload::Unit => de::Unexpected::UnitVariant,
-            },
-        },
-        exp,
-    )
-}
-
-fn invalid_variant_type<'de, Position>(
-    unexp: &'de VariantPayload<'de, Position>,
-    exp: &dyn de::Expected,
-) -> Error {
-    de::Error::invalid_type(
-        match &unexp {
-            VariantPayload::Structured(_) => de::Unexpected::StructVariant,
-            VariantPayload::Tuple(values) => match values.len() {
-                1 => de::Unexpected::NewtypeVariant,
-                _ => de::Unexpected::TupleVariant,
-            },
-            VariantPayload::Unit => de::Unexpected::UnitVariant,
-        },
-        exp,
-    )
-}
-
-fn invalid_value<'de, Position>(unexp: &'de Taml<'de, Position>, exp: &dyn de::Expected) -> Error {
-    de::Error::invalid_value(
-        match &unexp.value {
-            TamlValue::String(str) => de::Unexpected::Str(str),
-            TamlValue::Integer(str) => de::Unexpected::Other(str),
-            TamlValue::Float(str) => str
-                .parse()
-                .map_or_else(|_| de::Unexpected::Other(str), de::Unexpected::Float),
-            TamlValue::List(_) => de::Unexpected::Seq,
-            TamlValue::Map(_) => de::Unexpected::Map,
-            TamlValue::EnumVariant { payload, .. } => match payload {
-                VariantPayload::Structured(_) => de::Unexpected::StructVariant,
-                VariantPayload::Tuple(values) => match values.len() {
-                    1 => de::Unexpected::NewtypeVariant,
-                    _ => de::Unexpected::TupleVariant,
-                },
-                VariantPayload::Unit => de::Unexpected::UnitVariant,
-            },
-        },
-        exp,
-    )
-}
-
 macro_rules! number {
     ($deserialize:ident, $TamlVariant:ident => $visit:ident) => {
         fn $deserialize<V>(self, visitor: V) -> Result<V::Value>
@@ -125,10 +99,10 @@ macro_rules! number {
         {
             match &self.0.value {
                 TamlValue::$TamlVariant(str) => {
-                    let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                    let value = str.parse().map_err(|_| Error)?;
                     visitor.$visit(value)
                 }
-                _ => Err(invalid_type(self.0, &visitor)),
+                _ => Err(Error),
             }
         }
     };
@@ -179,7 +153,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
                 } else if let Ok(i128) = str.parse::<i128>() {
                     visitor.visit_i128(i128)
                 } else {
-                    Err(invalid_value(self.0, &visitor))
+                    Err(Error)
                 }
             }
             TamlValue::Float(_) => self.deserialize_f64(visitor),
@@ -208,7 +182,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
                 key,
                 payload: VariantPayload::Unit,
             } if key == "false" => visitor.visit_bool(false),
-            _ => Err(invalid_type(self.0, &visitor)),
+            _ => Err(Error),
         }
     }
 
@@ -237,10 +211,10 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
     {
         match &self.0.value {
             TamlValue::String(str) => {
-                let value = str.parse().map_err(|_| invalid_value(self.0, &visitor))?;
+                let value = str.parse().map_err(|_| Error)?;
                 visitor.visit_char(value)
             }
-            _ => Err(invalid_type(self.0, &visitor)),
+            _ => Err(Error),
         }
     }
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value>
@@ -249,7 +223,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
     {
         match &self.0.value {
             TamlValue::String(str) => visitor.visit_str(str),
-            _ => Err(invalid_type(self.0, &visitor)),
+            _ => Err(Error),
         }
     }
     fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
@@ -287,7 +261,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
         if matches!(&self.0.value, TamlValue::List(list) if list.is_empty()) {
             visitor.visit_unit()
         } else {
-            Err(invalid_type(self.0, &visitor))
+            Err(Error)
         }
     }
     fn deserialize_unit_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
@@ -310,7 +284,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
             TamlValue::List(list) => {
                 de::Deserializer::deserialize_seq(ListDeserializer(&list, self.1), visitor)
             }
-            _ => Err(invalid_type(self.0, &visitor)),
+            _ => Err(Error),
         }
     }
     fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<V::Value>
@@ -322,7 +296,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
                 de::Deserializer::deserialize_seq(ListDeserializer(&list, self.1), visitor)
             }
             TamlValue::List(list) => Err(de::Error::invalid_length(list.len(), &visitor)),
-            _ => Err(invalid_type(self.0, &visitor)),
+            _ => Err(Error),
         }
     }
     fn deserialize_tuple_struct<V>(
@@ -344,7 +318,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
             TamlValue::Map(map) => {
                 de::Deserializer::deserialize_map(MapDeserializer(map, self.1), visitor)
             }
-            _ => Err(invalid_type(self.0, &visitor)),
+            _ => Err(Error),
         }
     }
     fn deserialize_struct<V>(
@@ -403,7 +377,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
             fn unit_variant(self) -> Result<()> {
                 match self.0 {
                     VariantPayload::Unit => Ok(()),
-                    _ => Err(invalid_variant_type(self.0, &"unit variant")),
+                    _ => Err(Error),
                 }
             }
 
@@ -419,7 +393,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
                         values.len(),
                         &"tuple variant of length 1",
                     )),
-                    _ => Err(invalid_variant_type(self.0, &"tuple variant of length 1")),
+                    _ => Err(Error),
                 }
             }
 
@@ -434,7 +408,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
                     VariantPayload::Tuple(values) => {
                         Err(de::Error::invalid_length(values.len(), &visitor))
                     }
-                    _ => Err(invalid_variant_type(self.0, &visitor)),
+                    _ => Err(Error),
                 }
             }
 
@@ -450,7 +424,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
                     VariantPayload::Structured(fields) => {
                         de::Deserializer::deserialize_map(MapDeserializer(fields, self.1), visitor)
                     }
-                    _ => Err(invalid_variant_type(self.0, &visitor)),
+                    _ => Err(Error),
                 }
             }
         }
@@ -459,7 +433,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
             TamlValue::EnumVariant { key, payload } => {
                 visitor.visit_enum(EnumAccess(key, payload, self.1))
             }
-            _ => Err(invalid_type(self.0, &visitor)),
+            _ => Err(Error),
         }
     }
     fn deserialize_identifier<V>(self, _visitor: V) -> Result<V::Value>
