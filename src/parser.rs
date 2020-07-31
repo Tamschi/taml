@@ -109,7 +109,7 @@ struct BasicPathElement<'a, Position: Clone> {
 
 impl<'a, Position: Clone> BasicPathElement<'a, Position> {
     fn span(&self) -> Range<Position> {
-        self.variant.map_or_else(
+        self.variant.as_ref().map_or_else(
             || self.key.span().clone(),
             |variant| self.key.span().start.clone()..variant.span.end.clone(),
         )
@@ -195,7 +195,7 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
             //TODO: Make sure these aren't accepted by the parser.
             unreachable!("Completely empty tabular path segments are invalid.")
         } else if self.base.is_empty() {
-            for child in self.multi.as_ref().unwrap().0 {
+            for child in self.multi.as_ref().unwrap().0.iter() {
                 child.assign(selection, values, reporter)?
             }
 
@@ -255,7 +255,7 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
                 };
                 selection.unwrap_map_mut()
             };
-            for child in multi.0 {
+            for child in multi.0.iter() {
                 child.assign(selection, values.by_ref(), reporter)?
             }
             Ok(())
@@ -409,12 +409,12 @@ pub fn parse<'a, Position: Clone>(
                 match path.last().and_then(|s| s.tabular.as_ref()) {
                     Some(tabular) => {
                         let n = tabular.arity();
-                        let mut values = match parse_values_line(&mut iter, n, reporter) {
+                        let values = match parse_values_line(&mut iter, n, reporter) {
                             Ok(values) => values,
                             Err(()) => return Err(()),
                         };
 
-                        let values = values.into_iter();
+                        let mut values = values.into_iter();
                         if let Err(()) = tabular.assign(selection, &mut values, reporter) {
                             return Err(());
                         };
@@ -427,7 +427,7 @@ pub fn parse<'a, Position: Clone>(
                             Err(()) => return Err(()),
                         };
                         //TODO: Also report occupied.
-                        if let hash_map::Entry::Vacant(vacant) = selection.entry(key) {
+                        if let hash_map::Entry::Vacant(vacant) = selection.entry(key.clone()) {
                             vacant.insert(value);
                         } else {
                             reporter.report_with(|| Diagnostic {
@@ -836,14 +836,14 @@ where
                     };
 
                     selected = match (value, path_element.variant.as_ref()) {
-                        (TamlValue::Map(map), None) => &mut map,
+                        (TamlValue::Map(map), None) => map,
                         (
                             TamlValue::EnumVariant {
                                 key: existing_variant,
                                 payload: VariantPayload::Structured(fields),
                             },
                             Some(expected_variant),
-                        ) if existing_variant == expected_variant => &mut fields,
+                        ) if existing_variant == expected_variant => fields,
                         _ => unreachable!(),
                     };
                 }
@@ -860,36 +860,41 @@ fn instantiate<'a, 'b, Position: Clone>(
     reporter: &mut impl Reporter<Position>,
 ) -> Result<&'a mut Map<'b, Position>, ()> {
     for path_element in path {
-        selection = match path_element.key {
+        selection = match &path_element.key {
             BasicPathElementKey::Plain(key) => {
-                let entry = selection.entry(key.clone());
-                match (entry, path_element.variant) {
-                    (hash_map::Entry::Occupied(occupied), None) => {
-                        match occupied.get_mut() {
-                            Taml {
-                                span: _,
-                                value: TamlValue::Map(map),
-                            } => map,
-                            Taml { span, .. } => {
-                                reporter.report_with(|| Diagnostic {
+                let contains_key = selection.contains_key(key);
+                match (contains_key, path_element.variant.clone()) {
+                    (true, None) => match selection.get_mut(key).unwrap() {
+                        Taml {
+                            span: _,
+                            value: TamlValue::Map(map),
+                        } => map,
+                        Taml { span, .. } => {
+                            reporter.report_with(|| Diagnostic {
                                 r#type: DiagnosticType::NonMapValueSelected,
-                                labels: vec![DiagnosticLabel::new(
-                                    "This key is assigned something other than a map here...",
-                                    span.clone(),
-                                    DiagnosticLabelPriority::Auxiliary,
-                                ),DiagnosticLabel::new("...but is selected as map here.", path_element.span(), DiagnosticLabelPriority::Primary,)],
+                                labels: vec![
+                                    DiagnosticLabel::new(
+                                        "This key is assigned something other than a map here...",
+                                        span.clone(),
+                                        DiagnosticLabelPriority::Auxiliary,
+                                    ),
+                                    DiagnosticLabel::new(
+                                        "...but is selected as map here.",
+                                        path_element.span(),
+                                        DiagnosticLabelPriority::Primary,
+                                    ),
+                                ],
                             });
-                                return Err(());
-                            }
+                            return Err(());
                         }
-                    }
-                    (hash_map::Entry::Occupied(occupied), Some(_)) => {
+                    },
+                    (true, Some(_)) => {
                         reporter.report_with(|| Diagnostic {
                             r#type: DiagnosticType::DuplicateEnumInstantiation,
                             labels: vec![
                                 DiagnosticLabel::new(
                                     "This enum value has already been assigned here...",
-                                    occupied.get().span.clone(),
+                                    selection.get(key).unwrap().span.clone(),
                                     DiagnosticLabelPriority::Auxiliary,
                                 ),
                                 DiagnosticLabel::new(
@@ -901,17 +906,19 @@ fn instantiate<'a, 'b, Position: Clone>(
                         });
                         return Err(());
                     }
-                    (hash_map::Entry::Vacant(vacant), None) => vacant
-                        .insert(Taml {
+                    (false, None) => selection
+                        .entry(key.clone())
+                        .or_insert(Taml {
                             span: path_element.span(),
                             value: TamlValue::Map(Map::new()),
                         })
                         .unwrap_map_mut(),
-                    (hash_map::Entry::Vacant(vacant), Some(variant)) => vacant
-                        .insert(Taml {
+                    (false, Some(variant)) => selection
+                        .entry(key.clone())
+                        .or_insert(Taml {
                             span: path_element.span(),
                             value: TamlValue::EnumVariant {
-                                key: variant,
+                                key: variant.clone(),
                                 payload: VariantPayload::Structured(Map::new()),
                             },
                         })
@@ -921,14 +928,17 @@ fn instantiate<'a, 'b, Position: Clone>(
             BasicPathElementKey::List { key, span } => {
                 let list = selection
                     .entry(key.clone())
-                    .or_insert_with(|| Taml {
-                        span,
-                        value: TamlValue::List(vec![]),
+                    .or_insert_with({
+                        let span = span.clone();
+                        || Taml {
+                            span,
+                            value: TamlValue::List(vec![]),
+                        }
                     })
                     .unwrap_list_mut();
                 if let Some(variant) = path_element.variant {
                     list.push(Taml {
-                        span: variant.span,
+                        span: variant.span.clone(),
                         value: TamlValue::EnumVariant {
                             key: variant,
                             payload: VariantPayload::Structured(Map::new()),
@@ -937,7 +947,7 @@ fn instantiate<'a, 'b, Position: Clone>(
                     list.last_mut().unwrap().unwrap_variant_structured_mut()
                 } else {
                     list.push(Taml {
-                        span,
+                        span: span.clone(),
                         value: TamlValue::Map(Map::new()),
                     });
                     list.last_mut().unwrap().unwrap_map_mut()
@@ -1080,7 +1090,7 @@ fn parse_value<'a, Position: Clone>(
                         labels: vec![
                             DiagnosticLabel::new(
                                 "This list starts here...",
-                                span,
+                                paren_span,
                                 DiagnosticLabelPriority::Auxiliary,
                             ),
                             DiagnosticLabel::new(
@@ -1140,7 +1150,7 @@ fn parse_value<'a, Position: Clone>(
                 }
             }
 
-            _ => return err(span, reporter),
+            (_, span) => return err(span, reporter),
         })
     } else {
         err(None, reporter)

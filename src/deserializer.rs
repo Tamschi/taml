@@ -185,7 +185,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
             TamlValue::Float(_) => self.deserialize_f64(visitor),
             TamlValue::List(_) => self.deserialize_seq(visitor),
             TamlValue::Map(_) => self.deserialize_map(visitor),
-            TamlValue::EnumVariant { key, payload } => {
+            TamlValue::EnumVariant { .. } => {
                 self.deserialize_enum(
                     "",  // Ignored.
                     &[], // Ignored.
@@ -284,7 +284,7 @@ impl<'a, 'de, Position, Reporter: diagReporter<Position>> de::Deserializer<'de>
     where
         V: de::Visitor<'de>,
     {
-        if matches!(self.0.value, TamlValue::List(list) if list.is_empty()) {
+        if matches!(&self.0.value, TamlValue::List(list) if list.is_empty()) {
             visitor.visit_unit()
         } else {
             Err(invalid_type(self.0, &visitor))
