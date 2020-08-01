@@ -44,7 +44,7 @@ impl<'a, Position> IntoToken<'a, Position> for (lexerToken<'a>, Range<Position>)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Taml<'a, Position> {
     pub value: TamlValue<'a, Position>,
     pub span: Range<Position>,
@@ -76,7 +76,7 @@ impl<'a, Position> Taml<'a, Position> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TamlValue<'a, Position> {
     String(Woc<'a, String, str>),
     Integer(&'a str),
@@ -89,7 +89,7 @@ pub enum TamlValue<'a, Position> {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum VariantPayload<'a, Position> {
     Structured(Map<'a, Position>),
     Tuple(List<'a, Position>),

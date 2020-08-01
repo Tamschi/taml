@@ -1,7 +1,13 @@
-use codemap::CodeMap;
-use codemap_diagnostic::{ColorConfig, Diagnostic, Emitter, Level, SpanLabel, SpanStyle};
-use taml::diagnostics::{DiagnosticLabel, DiagnosticLabelPriority, DiagnosticType};
-use {cast::u64, serde::Deserialize, taml::deserializer::from_str};
+use {
+    codemap::CodeMap,
+    codemap_diagnostic::{ColorConfig, Diagnostic, Emitter, Level, SpanLabel, SpanStyle},
+    educe::*,
+    maplit::hashmap,
+    serde::de::IgnoredAny,
+    std::collections::HashMap,
+    taml::diagnostics::{DiagnosticLabel, DiagnosticLabelPriority, DiagnosticType},
+    {cast::u64, serde::Deserialize, taml::deserializer::from_str},
+};
 
 #[allow(non_camel_case_types)]
 type tamlDiagnostic = taml::diagnostics::Diagnostic<usize>;
@@ -37,12 +43,11 @@ fn no_fields_multi() {
     assert_eq!(
         diagnostics.as_slice(),
         &[
-            //TODO: Make the order of these deterministic (sort by span)!
             tamlDiagnostic {
                 r#type: DiagnosticType::UnknownField,
                 labels: vec![DiagnosticLabel::new(
                     "Expected no fields.",
-                    13..20,
+                    0..3,
                     DiagnosticLabelPriority::Primary,
                 )]
             },
@@ -50,7 +55,7 @@ fn no_fields_multi() {
                 r#type: DiagnosticType::UnknownField,
                 labels: vec![DiagnosticLabel::new(
                     "Expected no fields.",
-                    0..3,
+                    13..20,
                     DiagnosticLabelPriority::Primary,
                 )]
             },
@@ -157,6 +162,62 @@ fn expect_f32() {
         }]
     );
     report(text, diagnostics)
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct ExtraFields {
+    known: String,
+
+    #[serde(rename = "taml::extra_fields")]
+    extra_fields: HashMap<String, String>,
+}
+
+#[test]
+fn extra_fields() {
+    let text = "known: \"It is known.\"\n\
+    unknown: \"It is unknowable.\"\n";
+    let mut diagnostics = vec![];
+    assert_eq!(
+        from_str::<ExtraFields, _>(text, &mut diagnostics),
+        Ok(ExtraFields {
+            known: "It is known.".to_string(),
+            extra_fields: hashmap! {
+                "unknown".to_string() => "It is unknowable.".to_string()
+            },
+        }),
+        "diagnostics: {:?}",
+        diagnostics
+    );
+    assert_eq!(diagnostics.as_slice(), &[]);
+    report(text, diagnostics);
+}
+
+#[derive(Debug, Deserialize, Educe)]
+#[educe(PartialEq)]
+struct IgnoredExtraFields {
+    known: String,
+
+    #[educe(PartialEq(ignore))]
+    #[serde(rename = "taml::extra_fields")]
+    extra_fields: IgnoredAny,
+}
+
+#[test]
+fn ignored_extra_fields() {
+    let text = "known: \"It is known.\"\n\
+    unknown: \"It is unknowable.\"\n";
+    let mut diagnostics = vec![];
+    assert_eq!(
+        from_str::<IgnoredExtraFields, _>(text, &mut diagnostics),
+        Ok(IgnoredExtraFields {
+            known: "It is known.".to_string(),
+            extra_fields: IgnoredAny,
+        }),
+        "diagnostics: {:?}",
+        diagnostics
+    );
+    assert_eq!(diagnostics.as_slice(), &[]);
+    report(text, diagnostics);
 }
 
 fn report(text: &str, diagnostics: Vec<tamlDiagnostic>) {

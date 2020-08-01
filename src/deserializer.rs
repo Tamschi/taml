@@ -1,6 +1,5 @@
 //TODO: Add secondary labels without caption while unrolling due to error. Disarm/return `Ok(())` with  `.void()` on that guard.
 
-use std::{borrow::Cow, ops::Range};
 use {
     crate::{
         diagnostics::{
@@ -13,6 +12,9 @@ use {
         token::Token,
     },
     serde::de,
+    std::{borrow::Cow, collections::HashMap, ops::Range},
+    woc::Woc,
+    wyz::tap::Tap as _,
 };
 
 struct Deserializer<'a, 'de, Position: Clone, Reporter: diagReporter<Position>>(
@@ -73,6 +75,9 @@ enum SerdeError {
     UnknownVariant(String, &'static [&'static str]),
     UnknownField(String, &'static [&'static str]),
     MissingField(&'static str),
+
+    /// Used to specify that no further error handling should be done.
+    Silent,
 }
 impl std::fmt::Debug for SerdeError {
     fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -146,6 +151,10 @@ impl SerdeError {
         }
 
         move |serde_error| {
+            if matches!(serde_error, SerdeError::Silent) {
+                return Error;
+            }
+
             reporter.report_with(|| Diagnostic {
                 r#type: match serde_error {
                     SerdeError::Custom(_) => DiagnosticType::CustomErrorFromVisitor,
@@ -155,6 +164,7 @@ impl SerdeError {
                     SerdeError::UnknownVariant(_, _) => DiagnosticType::UnknownVariant,
                     SerdeError::UnknownField(_, _) => DiagnosticType::UnknownField,
                     SerdeError::MissingField(_) => DiagnosticType::MissingField,
+                    SerdeError::Silent => unreachable!(),
                 },
                 labels: vec![DiagnosticLabel::new(
                     match serde_error {
@@ -175,6 +185,7 @@ impl SerdeError {
                         SerdeError::MissingField(field) => {
                             format!("Missing field {}.", field).into()
                         }
+                        SerdeError::Silent => unreachable!(),
                     },
                     span,
                     DiagnosticLabelPriority::Primary,
@@ -183,7 +194,13 @@ impl SerdeError {
             Error
         }
     }
+
+    fn silence(_error: Error) -> SerdeError {
+        SerdeError::Silent
+    }
 }
+
+type SerdeResult<T> = std::result::Result<T, SerdeError>;
 
 #[allow(clippy::missing_errors_doc)]
 pub fn from_str<T: de::DeserializeOwned, Reporter: diagReporter<usize>>(
@@ -196,7 +213,7 @@ pub fn from_str<T: de::DeserializeOwned, Reporter: diagReporter<usize>>(
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn from_tokens<'de, T: de::Deserialize<'de>, Position: Clone + Default>(
+pub fn from_tokens<'de, T: de::Deserialize<'de>, Position: Clone + Default + Ord>(
     tokens: impl IntoIterator<Item = impl IntoToken<'de, Position>>,
     reporter: &mut impl diagReporter<Position>,
 ) -> Result<T> {
@@ -213,7 +230,7 @@ pub fn from_tokens<'de, T: de::Deserialize<'de>, Position: Clone + Default>(
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn from_taml<'de, T: de::Deserialize<'de>, Position: Clone>(
+pub fn from_taml<'de, T: de::Deserialize<'de>, Position: Clone + Ord>(
     taml: &Taml<'de, Position>,
     reporter: &mut impl diagReporter<Position>,
 ) -> Result<T> {
@@ -279,7 +296,7 @@ macro_rules! invalid_type {
     };
 }
 
-impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::Deserializer<'de>
+impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deserializer<'de>
     for Deserializer<'a, 'de, Position, Reporter>
 {
     type Error = Error;
@@ -510,12 +527,19 @@ impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::Deserialize
         V: de::Visitor<'de>,
     {
         match &self.0.value {
-            TamlValue::Map(map) => {
-                de::Deserializer::deserialize_map(MapDeserializer(map, self.1), visitor)
-            }
+            TamlValue::Map(map) => de::Deserializer::deserialize_map(
+                MapDeserializer {
+                    map,
+                    span: self.0.span.clone(),
+                    reporter: self.1,
+                },
+                visitor,
+            )
+            .map_err(SerdeError::reporter(self.1, self.0.span.clone())),
             _ => invalid_type!(self, visitor),
         }
     }
+
     fn deserialize_struct<V>(
         self,
         _name: &'static str,
@@ -525,27 +549,74 @@ impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::Deserialize
     where
         V: de::Visitor<'de>,
     {
+        const EXTRA_FIELDS: &str = "taml::extra_fields";
+
         match &self.0.value {
             TamlValue::Map(map) => {
-                // The default Deserialize doesn't check for extra fields, but TAML should be strict.
-                // We can report all of these diagnostics and continue parsing for a bit.
-                let mut status = Ok(());
-                for key in map.keys() {
-                    if !fields.contains(&key.as_ref()) {
+                if !fields.contains(&EXTRA_FIELDS) {
+                    // The default Deserialize doesn't check for extra fields, but TAML should be strict.
+                    // We can report all of these diagnostics and continue parsing for a bit.
+                    let mut status = Ok(());
+                    for key in map
+                        .keys()
+                        .filter(|key| !fields.contains(&key.as_ref()))
+                        .collect::<Vec<_>>()
+                        .tap_mut(|keys| keys.sort_by_key(|key| &key.span.start))
+                    {
                         status = Err(SerdeError::reporter(self.1, key.span.clone())(
                             de::Error::unknown_field(key, fields),
                         ));
                     }
+
+                    let result = de::Deserializer::deserialize_map(
+                        MapDeserializer {
+                            map,
+                            span: self.0.span.clone(),
+                            reporter: self.1,
+                        },
+                        visitor,
+                    )
+                    .map_err(SerdeError::reporter(self.1, self.0.span.clone()));
+
+                    status.and(result)
+                } else {
+                    let known_fields: Vec<_> = fields
+                        .iter()
+                        .copied()
+                        .filter(|name| *name != EXTRA_FIELDS)
+                        .collect();
+                    let (known, extra): (HashMap<_, _>, HashMap<_, _>) = map
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .partition(|(key, _)| known_fields.contains(&key.as_ref()));
+                    let mut known = known;
+                    assert!(known
+                        .insert(
+                            Key {
+                                name: Woc::Borrowed(EXTRA_FIELDS),
+                                span: self.0.span.clone(),
+                            },
+                            Taml {
+                                span: self.0.span.clone(),
+                                value: TamlValue::Map(extra)
+                            },
+                        )
+                        .is_none());
+                    de::Deserializer::deserialize_map(
+                        MapDeserializer {
+                            map: &known,
+                            span: self.0.span.clone(),
+                            reporter: self.1,
+                        },
+                        visitor,
+                    )
+                    .map_err(SerdeError::reporter(self.1, self.0.span.clone()))
                 }
-
-                let result =
-                    de::Deserializer::deserialize_map(MapDeserializer(map, self.1), visitor);
-
-                status.and(result)
             }
             _ => invalid_type!(self, visitor),
         }
     }
+
     fn deserialize_enum<V>(
         self,
         _name: &'static str,
@@ -561,7 +632,7 @@ impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::Deserialize
             &'a mut Reporter,
         );
 
-        impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::EnumAccess<'de>
+        impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::EnumAccess<'de>
             for EnumAccess<'a, 'de, Position, Reporter>
         {
             type Error = Error;
@@ -573,23 +644,28 @@ impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::Deserialize
             {
                 Ok((
                     seed.deserialize(KeyDeserializer(self.0, self.2))?,
-                    VariantAccess(self.1, self.2),
+                    VariantAccess {
+                        payload: self.1,
+                        span: self.0.span.clone(),
+                        reporter: self.2,
+                    },
                 ))
             }
         }
 
-        struct VariantAccess<'a, 'de, Position, Reporter: diagReporter<Position>>(
-            &'a VariantPayload<'de, Position>,
-            &'a mut Reporter,
-        );
+        struct VariantAccess<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> {
+            payload: &'a VariantPayload<'de, Position>,
+            span: Range<Position>,
+            reporter: &'a mut Reporter,
+        };
 
-        impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::VariantAccess<'de>
-            for VariantAccess<'a, 'de, Position, Reporter>
+        impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>>
+            de::VariantAccess<'de> for VariantAccess<'a, 'de, Position, Reporter>
         {
             type Error = Error;
 
             fn unit_variant(self) -> Result<()> {
-                match self.0 {
+                match self.payload {
                     VariantPayload::Unit => Ok(()),
                     _ => Err(Error), //TODO
                 }
@@ -599,9 +675,9 @@ impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::Deserialize
             where
                 T: de::DeserializeSeed<'de>,
             {
-                match self.0 {
+                match self.payload {
                     VariantPayload::Tuple(values) if values.len() == 1 => {
-                        seed.deserialize(Deserializer(&values[0], self.1))
+                        seed.deserialize(Deserializer(&values[0], self.reporter))
                     }
                     VariantPayload::Tuple(values) => Err(de::Error::invalid_length(
                         values.len(),
@@ -615,9 +691,12 @@ impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::Deserialize
             where
                 V: de::Visitor<'de>,
             {
-                match self.0 {
+                match self.payload {
                     VariantPayload::Tuple(values) if values.len() == len => {
-                        de::Deserializer::deserialize_seq(ListDeserializer(values, self.1), visitor)
+                        de::Deserializer::deserialize_seq(
+                            ListDeserializer(values, self.reporter),
+                            visitor,
+                        )
                     }
                     VariantPayload::Tuple(values) => {
                         Err(de::Error::invalid_length(values.len(), &visitor))
@@ -634,10 +713,16 @@ impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::Deserialize
             where
                 V: de::Visitor<'de>,
             {
-                match self.0 {
-                    VariantPayload::Structured(fields) => {
-                        de::Deserializer::deserialize_map(MapDeserializer(fields, self.1), visitor)
-                    }
+                match self.payload {
+                    VariantPayload::Structured(fields) => de::Deserializer::deserialize_map(
+                        MapDeserializer {
+                            span: self.span.clone(),
+                            map: fields,
+                            reporter: self.reporter,
+                        },
+                        visitor,
+                    )
+                    .map_err(SerdeError::reporter(self.reporter, self.span.clone())),
                     _ => Err(Error), //TODO
                 }
             }
@@ -696,56 +781,67 @@ impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::Deserialize
     }
 }
 
-struct MapDeserializer<'a, 'de, Position, Reporter: diagReporter<Position>>(
-    &'a Map<'de, Position>,
-    &'a mut Reporter,
-);
+struct MapDeserializer<'a, 'de, Position, Reporter: diagReporter<Position>> {
+    map: &'a Map<'de, Position>,
+    span: Range<Position>,
+    reporter: &'a mut Reporter,
+}
 
-impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::Deserializer<'de>
+impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deserializer<'de>
     for MapDeserializer<'a, 'de, Position, Reporter>
 {
-    type Error = Error;
+    type Error = SerdeError;
 
-    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_any<V>(self, visitor: V) -> SerdeResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        struct MapAccess<'a, 'de, Position, Reporter: diagReporter<Position>>(
-            MapIter<'a, 'de, Position>,
-            Option<&'a Taml<'de, Position>>,
-            &'a mut Reporter,
-        );
+        struct MapAccess<'a, 'de, Position, Reporter: diagReporter<Position>> {
+            iter: MapIter<'a, 'de, Position>,
+            next_value: Option<&'a Taml<'de, Position>>,
+            reporter: &'a mut Reporter,
+        }
 
-        impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::MapAccess<'de>
+        impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::MapAccess<'de>
             for MapAccess<'a, 'de, Position, Reporter>
         {
-            type Error = Error;
+            type Error = SerdeError;
 
             fn next_key_seed<K: de::DeserializeSeed<'de>>(
                 &mut self,
                 seed: K,
-            ) -> Result<Option<K::Value>> {
-                self.0
+            ) -> SerdeResult<Option<K::Value>> {
+                self.iter
                     .next()
                     .map(|(k, v)| {
-                        self.1 = Some(v);
-                        seed.deserialize(KeyDeserializer(k, self.2))
+                        self.next_value = Some(v);
+                        seed.deserialize(KeyDeserializer(k, self.reporter))
                     })
                     .transpose()
+                    .map_err(SerdeError::silence)
             }
 
             fn next_value_seed<V: de::DeserializeSeed<'de>>(
                 &mut self,
                 seed: V,
-            ) -> Result<V::Value> {
+            ) -> SerdeResult<V::Value> {
                 seed.deserialize(Deserializer(
-                    self.1.expect("next_value_seed called before next_key_seed"),
-                    self.2,
+                    self.next_value
+                        .expect("next_value_seed called before next_key_seed"),
+                    self.reporter,
                 ))
+                .map_err(SerdeError::silence)
             }
         }
 
-        visitor.visit_map(MapAccess(self.0.iter(), None, self.1)) // Plain forward, hopefully.
+        visitor
+            .visit_map(MapAccess {
+                iter: self.map.iter(),
+                next_value: None,
+                reporter: self.reporter,
+            })
+            .map_err(SerdeError::reporter(self.reporter, self.span.clone()))
+            .map_err(SerdeError::silence)
     }
 
     serde::forward_to_deserialize_any! {
@@ -760,7 +856,7 @@ struct ListDeserializer<'a, 'de, Position, Reporter: diagReporter<Position>>(
     &'a mut Reporter,
 );
 
-impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::Deserializer<'de>
+impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deserializer<'de>
     for ListDeserializer<'a, 'de, Position, Reporter>
 {
     type Error = Error;
@@ -774,7 +870,7 @@ impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::Deserialize
             &'a mut Reporter,
         );
 
-        impl<'a, 'de, Position: Clone, Reporter: diagReporter<Position>> de::SeqAccess<'de>
+        impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::SeqAccess<'de>
             for ListAccess<'a, 'de, Position, Reporter>
         {
             type Error = Error;
