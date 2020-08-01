@@ -3,11 +3,11 @@ use codemap_diagnostic::{ColorConfig, Diagnostic, Emitter, Level, SpanLabel, Spa
 use taml::diagnostics::{DiagnosticLabel, DiagnosticLabelPriority, DiagnosticType};
 use {cast::u64, serde::Deserialize, taml::deserializer::from_str};
 
-#[derive(Debug, PartialEq, Deserialize)]
-struct NoFields {}
-
 #[allow(non_camel_case_types)]
 type tamlDiagnostic = taml::diagnostics::Diagnostic<usize>;
+
+#[derive(Debug, PartialEq, Deserialize)]
+struct NoFields {}
 
 #[test]
 fn no_fields() {
@@ -37,14 +37,7 @@ fn no_fields_multi() {
     assert_eq!(
         diagnostics.as_slice(),
         &[
-            tamlDiagnostic {
-                r#type: DiagnosticType::UnknownField,
-                labels: vec![DiagnosticLabel::new(
-                    "Expected no fields.",
-                    0..3,
-                    DiagnosticLabelPriority::Primary,
-                )]
-            },
+            //TODO: Make the order of these deterministic (sort by span)!
             tamlDiagnostic {
                 r#type: DiagnosticType::UnknownField,
                 labels: vec![DiagnosticLabel::new(
@@ -53,7 +46,115 @@ fn no_fields_multi() {
                     DiagnosticLabelPriority::Primary,
                 )]
             },
+            tamlDiagnostic {
+                r#type: DiagnosticType::UnknownField,
+                labels: vec![DiagnosticLabel::new(
+                    "Expected no fields.",
+                    0..3,
+                    DiagnosticLabelPriority::Primary,
+                )]
+            },
         ]
+    );
+    report(text, diagnostics)
+}
+
+#[derive(Debug, PartialEq, Deserialize)]
+struct ThreeFields {
+    #[serde(default)]
+    field_1: Option<i8>,
+
+    #[serde(default)]
+    field_2: Option<String>,
+
+    #[serde(default)]
+    field_3: Option<f32>,
+}
+
+#[test]
+fn expected_other_fields() {
+    let text = "key: \"value\"\n";
+    let mut diagnostics = vec![];
+    from_str::<ThreeFields, _>(text, &mut diagnostics).unwrap_err();
+    assert_eq!(
+        diagnostics.as_slice(),
+        &[tamlDiagnostic {
+            r#type: DiagnosticType::UnknownField,
+            labels: vec![DiagnosticLabel::new(
+                "Expected `field_1`, `field_2` or `field_3`.",
+                0..3,
+                DiagnosticLabelPriority::Primary,
+            )]
+        }]
+    );
+    report(text, diagnostics)
+}
+
+#[derive(Debug, PartialEq, Deserialize)]
+struct TypedFields {
+    #[serde(default)]
+    i8: Option<i8>,
+
+    #[serde(default)]
+    string: Option<String>,
+
+    #[serde(default)]
+    f32: Option<f32>,
+}
+
+#[test]
+fn expect_i8() {
+    let text = "i8: \"value\"\n";
+    let mut diagnostics = vec![];
+    from_str::<TypedFields, _>(text, &mut diagnostics).unwrap_err();
+    assert_eq!(
+        diagnostics.as_slice(),
+        &[tamlDiagnostic {
+            r#type: DiagnosticType::InvalidType,
+            labels: vec![DiagnosticLabel::new(
+                "Expected i8 here.",
+                4..11,
+                DiagnosticLabelPriority::Primary,
+            )]
+        }]
+    );
+    report(text, diagnostics)
+}
+
+#[test]
+fn expect_string() {
+    let text = "string: 0\n";
+    let mut diagnostics = vec![];
+    from_str::<TypedFields, _>(text, &mut diagnostics).unwrap_err();
+    assert_eq!(
+        diagnostics.as_slice(),
+        &[tamlDiagnostic {
+            r#type: DiagnosticType::InvalidType,
+            labels: vec![DiagnosticLabel::new(
+                "Expected a string here.",
+                8..9,
+                DiagnosticLabelPriority::Primary,
+            )]
+        }]
+    );
+    report(text, diagnostics)
+}
+
+#[test]
+fn expect_f32() {
+    let text = "f32: (1, 2, 3, 4, 5)\n";
+    let mut diagnostics = vec![];
+    from_str::<TypedFields, _>(text, &mut diagnostics).unwrap_err();
+    assert_eq!(
+        diagnostics.as_slice(),
+        &[tamlDiagnostic {
+            r#type: DiagnosticType::InvalidType,
+            labels: vec![DiagnosticLabel::new(
+                "Expected f32 here.",
+                5..20,
+                DiagnosticLabelPriority::Primary,
+            )]
+        }]
     );
     report(text, diagnostics)
 }

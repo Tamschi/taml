@@ -131,7 +131,6 @@ impl SerdeError {
                     items => {
                         let len = items.len();
                         let mut items = items.iter();
-                        write!(f, "One of ")?;
                         for item in items.by_ref().take(len - 2) {
                             write!(f, "`{}`, ", item)?
                         }
