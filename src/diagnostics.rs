@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use {
     enum_properties::enum_properties,
     std::{fmt::Display, iter, ops::Range, string::String as stdString},
@@ -29,7 +30,7 @@ pub struct DiagnosticTypeProperties {
 }
 
 enum_properties! {
-    #[derive(Clone, Copy, Debug)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     #[non_exhaustive]
     pub enum DiagnosticType: DiagnosticTypeProperties {
         UnrecognizedToken {
@@ -157,6 +158,55 @@ enum_properties! {
             level: DiagnosticLevel::Error,
             title: "Non-map value selected",
         },
+
+        CustomErrorFromVisitor {
+            group: DiagnosticGroup::Deserialising,
+            code: 0,
+            level: DiagnosticLevel::Error,
+            title: "Custom error from visitor",
+        },
+
+        InvalidType {
+            group: DiagnosticGroup::Deserialising,
+            code: 1,
+            level: DiagnosticLevel::Error,
+            title: "Invalid type",
+        },
+
+        InvalidValue {
+            group: DiagnosticGroup::Deserialising,
+            code: 1,
+            level: DiagnosticLevel::Error,
+            title: "Invalid value",
+        },
+
+        InvalidLength{
+            group: DiagnosticGroup::Deserialising,
+            code: 1,
+            level: DiagnosticLevel::Error,
+            title: "Invalid length",
+        },
+
+        UnknownVariant {
+            group: DiagnosticGroup::Deserialising,
+            code: 1,
+            level: DiagnosticLevel::Error,
+            title: "Unknown variant",
+        },
+
+        UnknownField {
+            group: DiagnosticGroup::Deserialising,
+            code: 1,
+            level: DiagnosticLevel::Error,
+            title: "Unknown field",
+        },
+
+        MissingField {
+            group: DiagnosticGroup::Deserialising,
+            code: 1,
+            level: DiagnosticLevel::Error,
+            title: "Missing field",
+        },
     }
 }
 
@@ -166,34 +216,38 @@ impl Display for DiagnosticType {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiagnosticLabelPriority {
     Primary,
     Auxiliary,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DiagnosticLabel<Position> {
-    pub caption: Option<&'static str>,
+    pub caption: Option<Cow<'static, str>>,
     pub span: Option<Range<Position>>,
     pub priority: DiagnosticLabelPriority,
 }
 
 impl<Position> DiagnosticLabel<Position> {
-    pub fn new(
-        caption: impl Into<Option<&'static str>>,
-        span: impl Into<Option<Range<Position>>>,
+    pub fn new<
+        Caption: Into<Cow<'static, str>>,
+        CaptionOption: Into<Option<Caption>>,
+        SpanOption: Into<Option<Range<Position>>>,
+    >(
+        caption: CaptionOption,
+        span: SpanOption,
         priority: DiagnosticLabelPriority,
     ) -> Self {
         Self {
-            caption: caption.into(),
+            caption: caption.into().map(|c| c.into()),
             span: span.into(),
             priority,
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Diagnostic<Position> {
     pub r#type: DiagnosticType,
     pub labels: Vec<DiagnosticLabel<Position>>,

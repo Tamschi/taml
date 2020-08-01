@@ -313,7 +313,7 @@ pub fn parse<'a, Position: Clone>(
                         }))
                         .map(|span| Diagnostic {
                             r#type: DiagnosticType::UnrecognizedToken,
-                            labels: vec![DiagnosticLabel::new(
+                            labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
                                 None,
                                 span,
                                 DiagnosticLabelPriority::Primary,
@@ -684,7 +684,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                         ) {
                             reporter.report_with(|| Diagnostic {
                                 r#type: DiagnosticType::MissingVariantIdentifier,
-                                labels: vec![DiagnosticLabel::new(
+                                labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
                                     None,
                                     iter.next().map(|t| t.span.start.clone()..t.span.start),
                                     DiagnosticLabelPriority::Primary,
@@ -730,7 +730,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                                 _ => {
                                     reporter.report_with(|| Diagnostic {
                                         r#type: DiagnosticType::ExpectedListIdentifier,
-                                        labels: vec![DiagnosticLabel::new(
+                                        labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
                                             None,
                                             iter.next().map(|t| t.span),
                                             DiagnosticLabelPriority::Primary,
@@ -774,7 +774,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                     _ => {
                         reporter.report_with(|| Diagnostic {
                             r#type: DiagnosticType::ExpectedListIdentifier,
-                            labels: vec![DiagnosticLabel::new(
+                            labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
                                 None,
                                 iter.next().map(|t| t.span),
                                 DiagnosticLabelPriority::Primary,
@@ -1049,7 +1049,7 @@ fn parse_value<'a, Position: Clone>(
     ) -> Result<Taml<'a, Position>, ()> {
         reporter.report_with(|| Diagnostic {
             r#type: DiagnosticType::ExpectedValue,
-            labels: vec![DiagnosticLabel::new(
+            labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
                 None,
                 span,
                 DiagnosticLabelPriority::Primary,
