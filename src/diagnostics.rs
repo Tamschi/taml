@@ -175,35 +175,35 @@ enum_properties! {
 
         InvalidValue {
             group: DiagnosticGroup::Deserialising,
-            code: 1,
+            code: 2,
             level: DiagnosticLevel::Error,
             title: "Invalid value",
         },
 
         InvalidLength{
             group: DiagnosticGroup::Deserialising,
-            code: 1,
+            code: 3,
             level: DiagnosticLevel::Error,
             title: "Invalid length",
         },
 
         UnknownVariant {
             group: DiagnosticGroup::Deserialising,
-            code: 1,
+            code: 4,
             level: DiagnosticLevel::Error,
             title: "Unknown variant",
         },
 
         UnknownField {
             group: DiagnosticGroup::Deserialising,
-            code: 1,
+            code: 5,
             level: DiagnosticLevel::Error,
             title: "Unknown field",
         },
 
         MissingField {
             group: DiagnosticGroup::Deserialising,
-            code: 1,
+            code: 6,
             level: DiagnosticLevel::Error,
             title: "Missing field",
         },

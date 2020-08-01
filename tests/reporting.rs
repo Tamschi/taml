@@ -220,6 +220,31 @@ fn ignored_extra_fields() {
     report(text, diagnostics);
 }
 
+#[derive(Debug, Deserialize, PartialEq)]
+struct MissingFields {
+    missing_field: i8,
+}
+
+#[test]
+#[allow(clippy::reversed_empty_ranges)]
+fn missing_fields() {
+    let text = "\n";
+    let mut diagnostics = vec![];
+    from_str::<MissingFields, _>(text, &mut diagnostics).unwrap_err();
+    assert_eq!(
+        diagnostics.as_slice(),
+        &[tamlDiagnostic {
+            r#type: DiagnosticType::MissingField,
+            labels: vec![DiagnosticLabel::new(
+                "Missing field missing_field.",
+                0..0,
+                DiagnosticLabelPriority::Primary,
+            )]
+        }]
+    );
+    report(text, diagnostics);
+}
+
 fn report(text: &str, diagnostics: Vec<tamlDiagnostic>) {
     let mut codemap = CodeMap::new();
     let file_span = codemap.add_file("TAML".to_string(), text.to_string()).span;
