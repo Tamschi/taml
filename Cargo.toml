@@ -21,10 +21,10 @@ enum_properties = "0.2.1"
 gnaw = { path = "../gnaw" }
 lazy-transform-str = { path = "../lazy-transform-str" }
 logos = "0.11.4"
+quit = { version = "1.1.0", optional = true }
 serde = { version = "1.0.114", default-features = false }
 smartstring = "0.2.3"
 woc = { path = "../woc" }
-quit = { version = "1.1.0", optional = true }
 wyz = "0.2.0"
 
 [features]

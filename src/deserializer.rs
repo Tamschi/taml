@@ -17,9 +17,9 @@ use {
     wyz::tap::Tap as _,
 };
 
-struct Deserializer<'a, 'de, Position: Clone, Reporter: diagReporter<Position>>(
-    &'a Taml<'de, Position>,
-    &'a mut Reporter,
+pub struct Deserializer<'a, 'de, Position: Clone, Reporter: diagReporter<Position>>(
+    pub &'a Taml<'de, Position>,
+    pub &'a mut Reporter,
 );
 
 #[derive(Debug, PartialEq, Eq)]
@@ -234,7 +234,7 @@ pub fn from_taml<'de, T: de::Deserialize<'de>, Position: Clone + Ord>(
     taml: &Taml<'de, Position>,
     reporter: &mut impl diagReporter<Position>,
 ) -> Result<T> {
-    T::deserialize(Deserializer(&taml, reporter))
+    T::deserialize(&mut Deserializer(&taml, reporter))
 }
 
 macro_rules! number {
@@ -297,7 +297,7 @@ macro_rules! invalid_type {
 }
 
 impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deserializer<'de>
-    for Deserializer<'a, 'de, Position, Reporter>
+    for &mut Deserializer<'a, 'de, Position, Reporter>
 {
     type Error = Error;
 
@@ -687,7 +687,7 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
             {
                 match self.payload {
                     VariantPayload::Tuple(values) if values.len() == 1 => {
-                        seed.deserialize(Deserializer(&values[0], self.reporter))
+                        seed.deserialize(&mut Deserializer(&values[0], self.reporter))
                     }
                     VariantPayload::Tuple(values) => Err(de::Error::invalid_length(
                         values.len(),
@@ -835,7 +835,7 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
                 &mut self,
                 seed: V,
             ) -> SerdeResult<V::Value> {
-                seed.deserialize(Deserializer(
+                seed.deserialize(&mut Deserializer(
                     self.next_value
                         .expect("next_value_seed called before next_key_seed"),
                     self.reporter,
@@ -891,7 +891,7 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
             {
                 self.0
                     .next()
-                    .map(|t| seed.deserialize(Deserializer(t, self.1)))
+                    .map(|t| seed.deserialize(&mut Deserializer(t, self.1)))
                     .transpose()
             }
 
