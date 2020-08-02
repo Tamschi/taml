@@ -203,8 +203,8 @@ impl SerdeError {
 type SerdeResult<T> = std::result::Result<T, SerdeError>;
 
 #[allow(clippy::missing_errors_doc)]
-pub fn from_str<T: de::DeserializeOwned, Reporter: diagReporter<usize>>(
-    str: &str,
+pub fn from_str<'de, T: de::Deserialize<'de>, Reporter: diagReporter<usize>>(
+    str: &'de str,
     reporter: &mut Reporter,
 ) -> Result<T> {
     use logos::Logos as _;
