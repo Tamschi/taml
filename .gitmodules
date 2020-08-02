@@ -17,3 +17,6 @@
 [submodule "map-next"]
 	path = map-next
 	url = https://github.com/Tamschi/map-next.git
+[submodule "serde-any"]
+	path = serde-any
+	url = https://github.com/Tamschi/serde-any.git
