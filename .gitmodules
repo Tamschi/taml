@@ -22,3 +22,6 @@
 [submodule "woc"]
 	path = woc
 	url = https://github.com/Tamschi/woc.git
+[submodule "serde-detach"]
+	path = serde-detach
+	url = https://github.com/Tamschi/serdedetach.git
