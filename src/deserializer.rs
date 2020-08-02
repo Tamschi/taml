@@ -308,7 +308,35 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
         match &self.0.value {
             TamlValue::String(_) => self.deserialize_str(visitor),
             TamlValue::Integer(str) => {
-                if let Ok(u8) = str.parse::<u8>() {
+                if str.starts_with('-') {
+                    if let Ok(i8) = str.parse::<i8>() {
+                        visitor
+                            .visit_i8(i8)
+                            .map_err(SerdeError::reporter(self.1, self.0.span.clone()))
+                    } else if let Ok(i16) = str.parse::<i16>() {
+                        visitor
+                            .visit_i16(i16)
+                            .map_err(SerdeError::reporter(self.1, self.0.span.clone()))
+                    } else if let Ok(i32) = str.parse::<i32>() {
+                        visitor
+                            .visit_i32(i32)
+                            .map_err(SerdeError::reporter(self.1, self.0.span.clone()))
+                    } else if let Ok(i64) = str.parse::<i64>() {
+                        visitor
+                            .visit_i64(i64)
+                            .map_err(SerdeError::reporter(self.1, self.0.span.clone()))
+                    } else if let Ok(i128) = str.parse::<i128>() {
+                        visitor
+                            .visit_i128(i128)
+                            .map_err(SerdeError::reporter(self.1, self.0.span.clone()))
+                    } else {
+                        Err(de::Error::invalid_value(
+                            de::Unexpected::Other(str),
+                            &"an integer value requiring up to 128 bits",
+                        ))
+                        .map_err(SerdeError::reporter(self.1, self.0.span.clone()))
+                    }
+                } else if let Ok(u8) = str.parse::<u8>() {
                     visitor
                         .visit_u8(u8)
                         .map_err(SerdeError::reporter(self.1, self.0.span.clone()))
@@ -327,26 +355,6 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
                 } else if let Ok(u128) = str.parse::<u128>() {
                     visitor
                         .visit_u128(u128)
-                        .map_err(SerdeError::reporter(self.1, self.0.span.clone()))
-                } else if let Ok(i8) = str.parse::<i8>() {
-                    visitor
-                        .visit_i8(i8)
-                        .map_err(SerdeError::reporter(self.1, self.0.span.clone()))
-                } else if let Ok(i16) = str.parse::<i16>() {
-                    visitor
-                        .visit_i16(i16)
-                        .map_err(SerdeError::reporter(self.1, self.0.span.clone()))
-                } else if let Ok(i32) = str.parse::<i32>() {
-                    visitor
-                        .visit_i32(i32)
-                        .map_err(SerdeError::reporter(self.1, self.0.span.clone()))
-                } else if let Ok(i64) = str.parse::<i64>() {
-                    visitor
-                        .visit_i64(i64)
-                        .map_err(SerdeError::reporter(self.1, self.0.span.clone()))
-                } else if let Ok(i128) = str.parse::<i128>() {
-                    visitor
-                        .visit_i128(i128)
                         .map_err(SerdeError::reporter(self.1, self.0.span.clone()))
                 } else {
                     Err(de::Error::invalid_value(
@@ -430,9 +438,11 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
         V: de::Visitor<'de>,
     {
         match &self.0.value {
-            TamlValue::String(str) => visitor
-                .visit_str(str)
-                .map_err(SerdeError::reporter(self.1, self.0.span.clone())),
+            TamlValue::String(str) => match str {
+                Woc::Owned(string) => visitor.visit_str(string),
+                Woc::Borrowed(str) => visitor.visit_borrowed_str(str),
+            }
+            .map_err(SerdeError::reporter(self.1, self.0.span.clone())),
             _ => invalid_type!(self, visitor),
         }
     }
