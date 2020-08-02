@@ -44,6 +44,24 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug 'reserde': taml -> json",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=reserde",
+                    "--package=reserde"
+                ],
+                "filter": {
+                    "name": "reserde",
+                    "kind": "bin"
+                }
+            },
+            "args": ["-i", "taml", "-o", "json", "--if", "taml/test.taml"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug 'taml fmt'",
             "cargo": {
                 "args": [

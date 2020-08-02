@@ -1,22 +1,24 @@
-[submodule "taml"]
-	path = taml
-	url = https://github.com/Tamschi/taml.git
-
-[submodule "woc"]
-	path = woc
-	url = https://github.com/Tamschi/woc.git
-[submodule "switcheroo"]
-	path = switcheroo
-	url = https://github.com/Tamschi/switcheroo.git
-[submodule "lazy-transform-str"]
-	path = lazy-transform-str
-	url = https://github.com/Tamschi/lazy-transform-str.git
 [submodule "gnaw"]
 	path = gnaw
 	url = https://github.com/Tamschi/gnaw.git
+[submodule "lazy-transform-str"]
+	path = lazy-transform-str
+	url = https://github.com/Tamschi/lazy-transform-str.git
 [submodule "map-next"]
 	path = map-next
 	url = https://github.com/Tamschi/map-next.git
+[submodule "reserde"]
+	path = reserde
+	url = https://github.com/Tamschi/reserde.git
 [submodule "serde-any"]
 	path = serde-any
 	url = https://github.com/Tamschi/serde-any.git
+[submodule "switcheroo"]
+	path = switcheroo
+	url = https://github.com/Tamschi/switcheroo.git
+[submodule "taml"]
+	path = taml
+	url = https://github.com/Tamschi/taml.git
+[submodule "woc"]
+	path = woc
+	url = https://github.com/Tamschi/woc.git
