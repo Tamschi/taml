@@ -2,9 +2,9 @@ use {
     codemap::CodeMap,
     codemap_diagnostic::{ColorConfig, Diagnostic, Emitter, Level, SpanLabel, SpanStyle},
     educe::*,
-    maplit::hashmap,
+    indexmap::{indexmap, IndexMap},
     serde::de::IgnoredAny,
-    std::collections::HashMap,
+    std::io::stdout,
     taml::diagnostics::{DiagnosticLabel, DiagnosticLabelPriority, DiagnosticType},
     {cast::u64, serde::Deserialize, taml::deserializer::from_str},
 };
@@ -169,7 +169,7 @@ struct ExtraFields {
     known: String,
 
     #[serde(rename = "taml::extra_fields")]
-    extra_fields: HashMap<String, String>,
+    extra_fields: IndexMap<String, String>,
 }
 
 #[test]
@@ -181,7 +181,7 @@ fn extra_fields() {
         from_str::<ExtraFields, _>(text, &mut diagnostics),
         Ok(ExtraFields {
             known: "It is known.".to_string(),
-            extra_fields: hashmap! {
+            extra_fields: indexmap! {
                 "unknown".to_string() => "It is unknowable.".to_string()
             },
         }),
@@ -279,6 +279,9 @@ fn report(text: &str, diagnostics: Vec<tamlDiagnostic>) {
         .collect();
 
     if !diagnostics.is_empty() {
+        // Not great, but seems to help a bit with output weirdness.
+        let stdout = stdout();
+        let _stdout_lock = stdout.lock();
         Emitter::stderr(ColorConfig::Auto, Some(&codemap)).emit(&diagnostics)
     }
 }

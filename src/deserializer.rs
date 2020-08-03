@@ -11,8 +11,9 @@ use {
         },
         token::Token,
     },
+    indexmap::IndexMap,
     serde::de,
-    std::{borrow::Cow, collections::HashMap, ops::Range},
+    std::{borrow::Cow, ops::Range},
     woc::Woc,
     wyz::tap::Tap as _,
 };
@@ -595,7 +596,7 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
                         .copied()
                         .filter(|name| *name != EXTRA_FIELDS)
                         .collect();
-                    let (known, extra): (HashMap<_, _>, HashMap<_, _>) = map
+                    let (known, extra): (IndexMap<_, _>, IndexMap<_, _>) = map
                         .iter()
                         .map(|(k, v)| (k.clone(), v.clone()))
                         .partition(|(key, _)| known_fields.contains(&key.as_ref()));

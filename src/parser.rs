@@ -1,5 +1,3 @@
-//TODO: This entire file needs to have its types simplified.
-
 use {
     crate::{
         diagnostics::{
@@ -7,9 +5,9 @@ use {
         },
         token::Token as lexerToken,
     },
+    indexmap::{map, IndexMap},
     smartstring::alias::String,
     std::{
-        collections::{hash_map, HashMap},
         hash::Hash,
         iter::{self, Peekable},
         ops::{Deref, Range},
@@ -170,9 +168,9 @@ impl<'a, Position, Rhs: AsRef<str> + ?Sized> PartialEq<Rhs> for Key<'a, Position
 }
 impl<'a, Position> Eq for Key<'a, Position> {}
 
-pub type Map<'a, Position> = HashMap<Key<'a, Position>, Taml<'a, Position>>;
+pub type Map<'a, Position> = IndexMap<Key<'a, Position>, Taml<'a, Position>>;
 pub type MapIter<'iter, 'taml, Position> =
-    hash_map::Iter<'iter, Key<'taml, Position>, Taml<'taml, Position>>;
+    map::Iter<'iter, Key<'taml, Position>, Taml<'taml, Position>>;
 
 pub type List<'a, Position> = Vec<Taml<'a, Position>>;
 pub type ListIter<'iter, 'taml, Position> = std::slice::Iter<'iter, Taml<'taml, Position>>;
@@ -217,10 +215,8 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
 
         let selection: &mut Taml<'a, Position> = match &self.base.last().unwrap().key {
             BasicPathElementKey::Plain(key) => match selection.entry(key.clone()) {
-                hash_map::Entry::Vacant(vacant) => {
-                    vacant.insert(placeholder(key.span.start.clone()))
-                }
-                hash_map::Entry::Occupied(_) => unreachable!(),
+                map::Entry::Vacant(vacant) => vacant.insert(placeholder(key.span.start.clone())),
+                map::Entry::Occupied(_) => unreachable!(),
             },
             BasicPathElementKey::List { key, span } => {
                 let list = selection
@@ -251,7 +247,7 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
             } else {
                 *selection = Taml {
                     span: multi.1.clone(),
-                    value: TamlValue::Map(HashMap::new()),
+                    value: TamlValue::Map(IndexMap::new()),
                 };
                 selection.unwrap_map_mut()
             };
@@ -427,7 +423,7 @@ pub fn parse<'a, Position: Clone>(
                             Err(()) => return Err(()),
                         };
                         //TODO: Also report occupied.
-                        if let hash_map::Entry::Vacant(vacant) = selection.entry(key.clone()) {
+                        if let map::Entry::Vacant(vacant) = selection.entry(key.clone()) {
                             vacant.insert(value);
                         } else {
                             reporter.report_with(|| Diagnostic {
@@ -823,10 +819,10 @@ where
                 for path_element in base {
                     let map = selected;
                     let value = match &path_element.key {
-                        BasicPathElementKey::Plain(key) => &mut map.get_mut(&key).unwrap().value,
+                        BasicPathElementKey::Plain(key) => &mut map.get_mut(key).unwrap().value,
 
                         BasicPathElementKey::List { key, .. } => {
-                            match &mut map.get_mut(&key).unwrap().value {
+                            match &mut map.get_mut(key).unwrap().value {
                                 TamlValue::List(selected) => {
                                     &mut selected.last_mut().unwrap().value
                                 }
