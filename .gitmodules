@@ -10,9 +10,6 @@
 [submodule "reserde"]
 	path = reserde
 	url = https://github.com/Tamschi/reserde.git
-[submodule "serde-any"]
-	path = serde-any
-	url = https://github.com/Tamschi/serde-any.git
 [submodule "switcheroo"]
 	path = switcheroo
 	url = https://github.com/Tamschi/switcheroo.git
@@ -25,3 +22,6 @@
 [submodule "serde-detach"]
 	path = serde-detach
 	url = https://github.com/Tamschi/serdedetach.git
+[submodule "serde-object"]
+	path = serde-object
+	url = https://github.com/Tamschi/serde-object.git
