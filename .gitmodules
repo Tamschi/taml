@@ -25,3 +25,6 @@
 [submodule "serde-object"]
 	path = serde-object
 	url = https://github.com/Tamschi/serde-object.git
+[submodule "serde-object-assistant-extra"]
+	path = serde-object-assistant-extra
+	url = https://github.com/Tamschi/serde-object-assistant-extra.git
