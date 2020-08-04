@@ -705,6 +705,9 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
             type Error = Error;
 
             fn unit_variant(self) -> Result<()> {
+                #[cfg(feature = "serde-object-assist")]
+                HINT.lock().unwrap().take();
+
                 match self.payload {
                     VariantPayload::Unit => Ok(()),
                     _ => Err(Error), //TODO
@@ -715,6 +718,9 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
             where
                 T: de::DeserializeSeed<'de>,
             {
+                #[cfg(feature = "serde-object-assist")]
+                HINT.lock().unwrap().take();
+
                 match self.payload {
                     VariantPayload::Tuple(values) if values.len() == 1 => {
                         seed.deserialize(&mut Deserializer(&values[0], self.reporter))
@@ -731,6 +737,9 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
             where
                 V: de::Visitor<'de>,
             {
+                #[cfg(feature = "serde-object-assist")]
+                HINT.lock().unwrap().take();
+
                 match self.payload {
                     VariantPayload::Tuple(values) if values.len() == len => {
                         de::Deserializer::deserialize_seq(
@@ -753,6 +762,9 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
             where
                 V: de::Visitor<'de>,
             {
+                #[cfg(feature = "serde-object-assist")]
+                HINT.lock().unwrap().take();
+
                 match self.payload {
                     VariantPayload::Structured(fields) => de::Deserializer::deserialize_map(
                         MapDeserializer {
