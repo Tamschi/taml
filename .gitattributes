@@ -3,4 +3,5 @@
 *.json text eol=lf
 *.taml text eol=lf
 
+Cargo.lock text eol=lf
 Cargo.toml text eol=lf
