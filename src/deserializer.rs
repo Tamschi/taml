@@ -15,7 +15,7 @@ use {
     serde::de,
     std::{borrow::Cow, ops::Range},
     woc::Woc,
-    wyz::tap::Tap as _,
+    wyz::{Pipe as _, Tap as _},
 };
 
 pub struct Deserializer<'a, 'de, Position: Clone, Reporter: diagReporter<Position>>(
@@ -637,6 +637,16 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
     where
         V: de::Visitor<'de>,
     {
+        #[cfg(feature = "serde-object-assist")]
+        lazy_static::lazy_static! {
+            static ref HINT: std::sync::Mutex<Option<serde_object_assistant_extra::VariantKind>> = std::sync::Mutex::default();
+        }
+
+        #[cfg(feature = "serde-object-assist")]
+        #[linkme::distributed_slice(serde_object_assistant_extra::ENUM_VARIANT_ASSISTS)]
+        static ENUM_VARIANT_ASSIST: fn() -> Option<serde_object_assistant_extra::VariantKind> =
+            || HINT.lock().unwrap().take();
+
         struct EnumAccess<'a, 'de, Position, Reporter: diagReporter<Position>>(
             &'a Key<'de, Position>,
             &'a VariantPayload<'de, Position>,
@@ -653,8 +663,27 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
             where
                 V: de::DeserializeSeed<'de>,
             {
+                let value = seed.deserialize(KeyDeserializer(self.0, self.2))?;
+
+                #[cfg(feature = "serde-object-assist")]
+                {
+                    use serde_object_assistant_extra::VariantKind;
+                    *HINT.lock().unwrap() = match &self.1 {
+                        VariantPayload::Structured(map) => VariantKind::Struct(
+                            map.keys()
+                                .map(|k| k.name.to_string().into())
+                                .collect::<Vec<_>>()
+                                .into(),
+                        ),
+                        VariantPayload::Tuple(list) if list.len() == 1 => VariantKind::Newtype,
+                        VariantPayload::Tuple(list) => VariantKind::Tuple(list.len()),
+                        VariantPayload::Unit => VariantKind::Unit,
+                    }
+                    .pipe(Some);
+                }
+
                 Ok((
-                    seed.deserialize(KeyDeserializer(self.0, self.2))?,
+                    value,
                     VariantAccess {
                         payload: self.1,
                         span: self.0.span.clone(),
