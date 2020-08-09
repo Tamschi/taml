@@ -424,7 +424,7 @@ dependencies = [
 
 [[package]]
 name = "serde-detach"
-version = "0.0.0-dev"
+version = "0.0.0-alpha.0"
 dependencies = [
  "serde",
  "serde-object",
