@@ -11,10 +11,12 @@ use {
     std::{
         hash::Hash,
         iter::{self, Peekable},
+        marker::PhantomData,
         ops::{Deref, Range},
     },
     try_match::try_match,
     woc::Woc,
+    wyz::Pipe as _,
 };
 
 pub trait IntoToken<'a, Position> {
@@ -1105,6 +1107,119 @@ fn parse_values_line<'a, Position: Clone>(
         assert_eq!(iter.next().unwrap().token, lexerToken::Comma);
     }
     Ok(values)
+}
+
+fn string<
+    'a: 'b,
+    'b,
+    Iter: 'b + Iterator<Item = Token<'a, Position>>,
+    Reporter: 'b,
+    Position: 'b,
+>() -> impl 'b + Fn(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>> {
+    combi::match_map!(|token, _| Token {
+        token: lexerToken::String(str),
+        span,
+    } => Ok(Taml {
+        value: TamlValue::String(str),
+        span,
+    }))
+}
+
+fn float<
+    'a: 'b,
+    'b,
+    Iter: 'b + Iterator<Item = Token<'a, Position>>,
+    Reporter: 'b,
+    Position: 'b,
+>() -> impl 'b + Fn(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>> {
+    combi::match_map!(|token, _| Token {
+        token: lexerToken::Float(str),
+        span,
+    } => Ok(Taml {
+        value: TamlValue::Float(str),
+        span,
+    }))
+}
+
+fn integer<
+    'a: 'b,
+    'b,
+    Iter: 'b + Iterator<Item = Token<'a, Position>>,
+    Reporter: 'b,
+    Position: 'b,
+>() -> impl 'b + Fn(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>> {
+    combi::match_map!(|token, _| Token {
+        token: lexerToken::Integer(str),
+        span,
+    } => Ok(Taml {
+        value: TamlValue::Integer(str),
+        span,
+    }))
+}
+
+fn key<'a: 'b, 'b, Iter: 'b + Iterator<Item = Token<'a, Position>>, Reporter: 'b, Position: 'b>(
+) -> impl 'b + Fn(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Key<'a, Position>, ()>> {
+    combi::match_map!(|token, _| Token {
+        token: lexerToken::Identifier(name),
+        span,
+    } => Ok(Key { name, span }))
+}
+
+fn paren<
+    'a: 'b,
+    'b,
+    Iter: 'b + Iterator<Item = Token<'a, Position>>,
+    Reporter: 'b,
+    Position: 'b,
+>() -> impl 'b + Fn(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<PhantomData<&'a ()>, ()>> {
+    combi::match_map!(|token, _| Token { token: lexerToken::Paren, span: _ } => Ok(PhantomData))
+}
+
+fn thesis<
+    'a: 'b,
+    'b,
+    Iter: 'b + Iterator<Item = Token<'a, Position>>,
+    Reporter: 'b,
+    Position: 'b,
+>() -> impl 'b + Fn(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<PhantomData<&'a ()>, ()>> {
+    combi::match_map!(|token, _| Token { token: lexerToken::Thesis, span: _ } => Ok(PhantomData))
+}
+
+fn variant<
+    'a: 'b,
+    'b,
+    Iter: 'b + Iterator<Item = Token<'a, Position>>,
+    Reporter: 'b,
+    Position: 'b + Clone,
+>() -> impl 'b + Fn(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>> {
+    combi::sequence((key(), |key: Key<'a, Position>| {
+        combi::assert(combi::first_match((
+            combi::todo(),
+            combi::accept({
+                let key = key.clone();
+                move |_| {
+                    Ok(Taml {
+                        value: TamlValue::EnumVariant {
+                            key: key.clone(),
+                            payload: VariantPayload::Unit,
+                        },
+                        span: key.span.clone(),
+                    })
+                }
+            })
+            .pipe(combi::some),
+        )))
+    }))
+}
+
+fn value<
+    'a: 'b,
+    'b,
+    Iter: 'b + Iterator<Item = Token<'a, Position>>,
+    Reporter: 'b,
+    Position: 'b + Clone,
+>() -> impl 'b + Fn(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>> {
+    combi::first_match((string(), float(), integer(), variant()))
 }
 
 fn parse_value<'a, Position: Clone>(
