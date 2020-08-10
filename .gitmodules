@@ -28,3 +28,6 @@
 [submodule "serde-object-assistant-extra"]
 	path = serde-object-assistant-extra
 	url = https://github.com/Tamschi/serde-object-assistant-extra.git
+[submodule "opaque-unwrap"]
+	path = opaque-unwrap
+	url = https://github.com/Tamschi/opaque-unwrap.git

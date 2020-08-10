@@ -310,6 +310,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "opaque-unwrap"
+version = "0.0.0"
+
+[[package]]
 name = "percent-encoding"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -466,7 +470,6 @@ dependencies = [
 name = "serde-object"
 version = "0.0.0-dev"
 dependencies = [
- "cast",
  "lazy_static",
  "serde",
  "serde-object-assistant-extra",
@@ -479,7 +482,6 @@ name = "serde-object-assistant-extra"
 version = "0.0.0-dev"
 dependencies = [
  "linkme",
- "serde",
 ]
 
 [[package]]
@@ -625,10 +627,12 @@ dependencies = [
  "linkme",
  "logos",
  "maplit",
+ "opaque-unwrap",
  "quit",
  "serde",
  "serde-object-assistant-extra",
  "smartstring",
+ "try_match",
  "woc",
  "wyz",
 ]
