@@ -1,7 +1,7 @@
 use {
     crate::{
         diagnostics::{
-            Diagnostic, DiagnosticLabel, DiagnosticLabelPriority, DiagnosticType, Reporter,
+            self, Diagnostic, DiagnosticLabel, DiagnosticLabelPriority, DiagnosticType, Reporter,
         },
         token::Token as lexerToken,
     },
@@ -16,7 +16,6 @@ use {
     },
     try_match::try_match,
     woc::Woc,
-    wyz::Pipe as _,
 };
 
 pub trait IntoToken<'a, Position> {
@@ -1168,28 +1167,53 @@ fn key<'a: 'b, 'b, Iter: 'b + Iterator<Item = Token<'a, Position>>, Reporter: 'b
     } => Ok(Key { name, span }))
 }
 
-fn paren<
-    'a: 'b,
-    'b,
-    Iter: 'b + Iterator<Item = Token<'a, Position>>,
-    Reporter: 'b,
-    Position: 'b,
->(
-) -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<PhantomData<&'a ()>, ()>>
-{
-    combi::match_map!(|token, _| Token { token: lexerToken::Paren, span: _ } => Ok(PhantomData))
+fn paren<'a, Iter: 'a + Iterator<Item = Token<'a, Position>>, Reporter: 'a, Position: 'a>(
+) -> impl 'a + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Range<Position>, ()>> {
+    combi::match_map!(|token, _| Token { token: lexerToken::Paren, span } => Ok(span))
 }
 
-fn thesis<
+fn thesis<'a, Iter: 'a + Iterator<Item = Token<'a, Position>>, Reporter: 'a, Position: 'a>(
+) -> impl 'a + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Range<Position>, ()>> {
+    combi::match_map!(|token, _| Token { token: lexerToken::Thesis, span } => Ok(span))
+}
+
+fn list<
     'a: 'b,
     'b,
-    Iter: 'b + Iterator<Item = Token<'a, Position>>,
-    Reporter: 'b,
-    Position: 'b,
+    Iter: 'a + Iterator<Item = Token<'a, Position>>,
+    Reporter: 'a + diagnostics::Reporter<Position>,
+    Position: 'a + Clone,
 >(
-) -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<PhantomData<&'a ()>, ()>>
+    inner: impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Result<Taml<'a, Position>, ()>,
+) -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>>
 {
-    combi::match_map!(|token, _| Token { token: lexerToken::Thesis, span: _ } => Ok(PhantomData))
+    combi::sequence((
+        paren(),
+        |paren_span| combi::map_closed(inner, |value, _| Ok((paren_span, value))),
+        |(paren_span, value)| {
+            combi::require(
+                combi::map_open(thesis(), |_, _: &mut Reporter| Ok(value)),
+                |next: Option<&Token<'a, Position>>, reporter| {
+                    reporter.report_with(|| Diagnostic {
+                        r#type: DiagnosticType::UnclosedList,
+                        labels: vec![
+                            DiagnosticLabel::new(
+                                "This list starts here...",
+                                paren_span,
+                                DiagnosticLabelPriority::Auxiliary,
+                            ),
+                            DiagnosticLabel::new(
+                                "...but is unclosed at this point.",
+                                next.map(|t| t.span.start.clone()..t.span.start.clone()),
+                                DiagnosticLabelPriority::Primary,
+                            ),
+                        ],
+                    });
+                    Err(())
+                },
+            )
+        },
+    ))
 }
 
 fn variant<
