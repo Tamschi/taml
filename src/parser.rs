@@ -6,12 +6,14 @@ use {
         token::Token as lexerToken,
     },
     indexmap::{map, IndexMap},
+    opaque_unwrap::OpaqueUnwrap as _,
     smartstring::alias::String,
     std::{
         hash::Hash,
         iter::{self, Peekable},
         ops::{Deref, Range},
     },
+    try_match::try_match,
     woc::Woc,
 };
 
@@ -19,6 +21,7 @@ pub trait IntoToken<'a, Position> {
     fn into_token(self) -> Token<'a, Position>;
 }
 
+#[derive(Debug)]
 pub struct Token<'a, Position> {
     token: lexerToken<'a>,
     span: Range<Position>,
@@ -214,10 +217,13 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
         }
 
         let selection: &mut Taml<'a, Position> = match &self.base.last().unwrap().key {
-            BasicPathElementKey::Plain(key) => match selection.entry(key.clone()) {
-                map::Entry::Vacant(vacant) => vacant.insert(placeholder(key.span.start.clone())),
-                map::Entry::Occupied(_) => unreachable!(),
-            },
+            BasicPathElementKey::Plain(key) => try_match!(
+                map::Entry::Vacant(vacant)
+                = selection.entry(key.clone())
+                => vacant.insert(placeholder(key.span.start.clone()))
+            )
+            .opaque_unwrap(),
+
             BasicPathElementKey::List { key, span } => {
                 let list = selection
                     .entry(key.clone())
@@ -462,8 +468,15 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
     loop {
         match iter.peek().map(|t| &t.token) {
             None => break,
-            Some(lexerToken::Identifier(_)) => match iter.next().unwrap() {
-                 Token{span: key_span, token:lexerToken::Identifier(key)}=> base.push(BasicPathElement {
+            Some(lexerToken::Identifier(_)) => {
+                let (key, key_span) = try_match!(
+                    Token {
+                        span: _1,
+                        token: lexerToken::Identifier(_0),
+                    } = iter.next().unwrap()
+                )
+                .opaque_unwrap();
+                base.push(BasicPathElement {
                     key: BasicPathElementKey::Plain(Key{name:key, span:key_span}),
                     variant: if iter.peek().map(|t| &t.token) == Some(&lexerToken::Colon) {
                         assert_eq!(iter.next().unwrap().token, lexerToken::Colon);
@@ -481,96 +494,149 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
                             });
                             return Err(());
                         }
-                        match iter.next().unwrap() {
-                            Token{span: variant_span,token:lexerToken::Identifier(variant)} => Some(Key{name:variant,span:variant_span}),
-                            _ => unreachable!(),
-                        }
+                        try_match!(
+                            Token {
+                                span: variant_span,
+                                token:lexerToken::Identifier(variant),
+                            } = iter.next().unwrap()
+                            => Some(Key {
+                                name: variant,
+                                span:variant_span,
+                            })
+                        ).opaque_unwrap()
                     } else {
                         None
                     },
-                }),
-                _ => unreachable!(),
-            },
+                })
+            }
             Some(lexerToken::Brac) => {
-                let Token { token, span: brac_span} = iter.next().unwrap();
+                let Token {
+                    token,
+                    span: brac_span,
+                } = iter.next().unwrap();
                 assert_eq!(token, lexerToken::Brac);
                 match iter.peek().map(|t| &t.token) {
-                    Some(lexerToken::Identifier(_)) => match iter.next().unwrap() {
-                        Token{span:key_span,token:lexerToken::Identifier(key)} => {
-                            let ket_end = match iter.peek().map(|t| &t.token) {
-                                Some(lexerToken::Ket) =>{let ket = iter.next().unwrap(); assert_eq!(ket.token, lexerToken::Ket);ket.span.end},
-                                _ => {
-                                    reporter.report_with(||Diagnostic{
-                                        r#type: DiagnosticType::UnclosedListKey,
-                                        labels: vec![
-                                            DiagnosticLabel::new("The list key is opened here...", brac_span, DiagnosticLabelPriority::Auxiliary),
-                                            DiagnosticLabel::new("...but not closed at this point.\nExpected ].", iter.next().map(|t| t.span.start.clone()..t.span.start), DiagnosticLabelPriority::Primary),
-                                        ],
-                                    });
-                                    return Err(());
-                                },
-                            };
-                            base.push(BasicPathElement {
-                                key: BasicPathElementKey::List{key: Key{name: key, span: key_span}, span: brac_span.start..ket_end},
-                                variant: if iter.peek().map(|t| &t.token) == Some(&lexerToken::Colon) {
-                                    assert_eq!(iter.next().unwrap().token, lexerToken::Colon);
-                                    if !matches!(iter.peek().map(|t| &t.token), Some(lexerToken::Identifier(_))) {
-                                        reporter.report_with(||Diagnostic{
-                                            r#type: DiagnosticType::MissingVariantIdentifier,
-                                            labels: vec![DiagnosticLabel::new(
-                                                "Colons in headings must be followed by an identifier.",
-                                                iter.next().map(|t| t.span),
-                                                DiagnosticLabelPriority::Primary,
-                                            )]
-                                        });
-                                        return Err(());
-                                    }
-                                    match iter.next().unwrap() {
-                                        Token{span:variant_span,token:lexerToken::Identifier(variant)} => Some(Key{name: variant, span:variant_span}),
-                                        _ => unreachable!(),
-                                    }
-                                } else {
-                                    None
-                                },
-                            })
-                        }
-                        _ => unreachable!(),
-                    },
-                    Some(lexerToken::Brac) => {
-                        tabular = Some(parse_tabular_path_segment(iter, reporter)?);
-                        match iter.peek().map(|t| &t.token) {
-                            Some(lexerToken::Ket) => assert_eq!(iter.next().unwrap().token, lexerToken::Ket),
-                            _ =>{
-                                reporter.report_with(||Diagnostic{
-                                    r#type: DiagnosticType::UnclosedTabularPathSection,
+                    Some(lexerToken::Identifier(_)) => {
+                        let (key, key_span) = try_match!(
+                            Token {
+                                span: _1,
+                                token: lexerToken::Identifier(_0),
+                            } = iter.next().unwrap()
+                        )
+                        .opaque_unwrap();
+                        let ket_end = match iter.peek().map(|t| &t.token) {
+                            Some(lexerToken::Ket) => try_match!(
+                                Token { token: lexerToken::Ket, span }
+                                = iter.next().unwrap()
+                                => span.end
+                            )
+                            .opaque_unwrap(),
+                            _ => {
+                                reporter.report_with(|| Diagnostic {
+                                    r#type: DiagnosticType::UnclosedListKey,
                                     labels: vec![
-                                        DiagnosticLabel::new("The tabular section is opened here...", brac_span, DiagnosticLabelPriority::Auxiliary),
-                                        DiagnosticLabel::new("...but not closed at this point.\nExpected ].", iter.next().map(|t| t.span.start.clone()..t.span.start), DiagnosticLabelPriority::Primary),
+                                        DiagnosticLabel::new(
+                                            "The list key is opened here...",
+                                            brac_span,
+                                            DiagnosticLabelPriority::Auxiliary,
+                                        ),
+                                        DiagnosticLabel::new(
+                                            "...but not closed at this point.\nExpected ].",
+                                            iter.next().map(|t| t.span.start.clone()..t.span.start),
+                                            DiagnosticLabelPriority::Primary,
+                                        ),
                                     ],
                                 });
                                 return Err(());
+                            }
+                        };
+                        base.push(BasicPathElement {
+                            key: BasicPathElementKey::List {
+                                key: Key {
+                                    name: key,
+                                    span: key_span,
+                                },
+                                span: brac_span.start..ket_end,
                             },
+                            variant: if iter.peek().map(|t| &t.token) == Some(&lexerToken::Colon) {
+                                assert_eq!(iter.next().unwrap().token, lexerToken::Colon);
+                                if !matches!(
+                                    iter.peek().map(|t| &t.token),
+                                    Some(lexerToken::Identifier(_))
+                                ) {
+                                    reporter.report_with(|| Diagnostic {
+                                        r#type: DiagnosticType::MissingVariantIdentifier,
+                                        labels: vec![DiagnosticLabel::new(
+                                            "Colons in headings must be followed by an identifier.",
+                                            iter.next().map(|t| t.span),
+                                            DiagnosticLabelPriority::Primary,
+                                        )],
+                                    });
+                                    return Err(());
+                                }
+                                try_match!(
+                                    Token{
+                                        span: variant_span,
+                                        token: lexerToken::Identifier(variant),
+                                    } = iter.next().unwrap()
+                                    => Some(Key{
+                                        name: variant,
+                                        span:variant_span,
+                                    })
+                                )
+                                .opaque_unwrap()
+                            } else {
+                                None
+                            },
+                        })
+                    }
+                    Some(lexerToken::Brac) => {
+                        tabular = Some(parse_tabular_path_segment(iter, reporter)?);
+                        match iter.peek().map(|t| &t.token) {
+                            Some(lexerToken::Ket) => {
+                                assert_eq!(iter.next().unwrap().token, lexerToken::Ket)
+                            }
+                            _ => {
+                                reporter.report_with(|| Diagnostic {
+                                    r#type: DiagnosticType::UnclosedTabularPathSection,
+                                    labels: vec![
+                                        DiagnosticLabel::new(
+                                            "The tabular section is opened here...",
+                                            brac_span,
+                                            DiagnosticLabelPriority::Auxiliary,
+                                        ),
+                                        DiagnosticLabel::new(
+                                            "...but not closed at this point.\nExpected ].",
+                                            iter.next().map(|t| t.span.start.clone()..t.span.start),
+                                            DiagnosticLabelPriority::Primary,
+                                        ),
+                                    ],
+                                });
+                                return Err(());
+                            }
                         }
                     }
                     _ => {
-                        reporter.report_with(||Diagnostic {
+                        reporter.report_with(|| Diagnostic {
                             r#type: DiagnosticType::ExpectedPathSegment,
                             labels: vec![DiagnosticLabel::new(
                                 "Expected [ or an identifier here.",
                                 iter.next().map(|t| t.span),
-                                DiagnosticLabelPriority::Primary)]});
+                                DiagnosticLabelPriority::Primary,
+                            )],
+                        });
                         return Err(());
-                    },
+                    }
                 }
             }
             Some(_) => {
-                reporter.report_with(||Diagnostic {
+                reporter.report_with(|| Diagnostic {
                     r#type: DiagnosticType::ExpectedPathSegment,
                     labels: vec![DiagnosticLabel::new(
                         "Expected [ or an identifier here.",
                         iter.next().map(|t| t.span),
                         DiagnosticLabelPriority::Primary,
-                    )]
+                    )],
                 });
                 return Err(());
             }
@@ -663,11 +729,16 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
             }
 
             //TODO: Deduplicate the code
-            Some(lexerToken::Identifier(_)) => match iter.next().unwrap() {
-                Token {
-                    span,
-                    token: lexerToken::Identifier(key_name),
-                } => base.push(BasicPathElement {
+            Some(lexerToken::Identifier(_)) => {
+                let (key_name, span) = try_match!(
+                    Token {
+                        span: _1,
+                        token: lexerToken::Identifier(_0),
+                    } = iter.next().unwrap()
+                )
+                .opaque_unwrap();
+
+                base.push(BasicPathElement {
                     key: BasicPathElementKey::Plain(Key {
                         name: key_name,
                         span,
@@ -688,54 +759,59 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                             });
                             return Err(());
                         }
-                        match iter.next().unwrap() {
+                        try_match!(
                             Token {
                                 span,
                                 token: lexerToken::Identifier(variant_name),
-                            } => Some(Key {
+                            } = iter.next().unwrap()
+                            => Some(Key {
                                 name: variant_name,
                                 span,
-                            }),
-                            _ => unreachable!(),
-                        }
+                            })
+                        )
+                        .opaque_unwrap()
                     } else {
                         None
                     },
-                }),
-                _ => unreachable!(),
-            },
+                })
+            }
 
             Some(lexerToken::Brac) => {
-                let brac_start = {
-                    let brac = iter.next().unwrap();
-                    assert_eq!(brac.token, lexerToken::Brac);
-                    brac.span.start
-                };
+                let brac_start = try_match!(
+                    Token { token: lexerToken::Brac, span }
+                    = iter.next().unwrap()
+                    => span.start
+                )
+                .opaque_unwrap();
                 match iter.peek().map(|t| &t.token) {
-                    Some(lexerToken::Identifier(_)) => match iter.next().unwrap() {
-                        Token {
-                            span: str_span,
-                            token: lexerToken::Identifier(str),
-                        } => {
-                            let ket_end = match iter.peek().map(|t| &t.token) {
-                                Some(lexerToken::Ket) => {
-                                    let ket = iter.next().unwrap();
-                                    assert_eq!(ket.token, lexerToken::Ket);
-                                    ket.span.end
-                                }
-                                _ => {
-                                    reporter.report_with(|| Diagnostic {
-                                        r#type: DiagnosticType::ExpectedListIdentifier,
-                                        labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
-                                            None,
-                                            iter.next().map(|t| t.span),
-                                            DiagnosticLabelPriority::Primary,
-                                        )],
-                                    });
-                                    return Err(());
-                                }
-                            };
-                            base.push(BasicPathElement {
+                    Some(lexerToken::Identifier(_)) => {
+                        let (str, str_span) = try_match!(
+                            Token {
+                                span: _1,
+                                token: lexerToken::Identifier(_0),
+                            } = iter.next().unwrap()
+                        )
+                        .opaque_unwrap();
+
+                        let ket_end = match iter.peek().map(|t| &t.token) {
+                            Some(lexerToken::Ket) => {
+                                let ket = iter.next().unwrap();
+                                assert_eq!(ket.token, lexerToken::Ket);
+                                ket.span.end
+                            }
+                            _ => {
+                                reporter.report_with(|| Diagnostic {
+                                    r#type: DiagnosticType::ExpectedListIdentifier,
+                                    labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
+                                        None,
+                                        iter.next().map(|t| t.span),
+                                        DiagnosticLabelPriority::Primary,
+                                    )],
+                                });
+                                return Err(());
+                            }
+                        };
+                        base.push(BasicPathElement {
                                 key: BasicPathElementKey::List{key: Key{name: str, span: str_span} , span: brac_start..ket_end},
                                 variant: if iter.peek().map(|t| &t.token)
                                     == Some(&lexerToken::Colon)
@@ -745,10 +821,11 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                                         iter.peek().map(|t| &t.token),
                                         Some(lexerToken::Identifier(_))
                                     ) {
-                                        match iter.next().unwrap() {
-                                            Token{span, token:lexerToken::Identifier(str)} => Some(Key{name: str, span}),
-                                            _ => unreachable!(),
-                                        }
+                                        try_match!(
+                                            Token{span, token:lexerToken::Identifier(str)}
+                                            = iter.next().unwrap()
+                                            => Some(Key{name: str, span})
+                                        ).opaque_unwrap()
                                     } else {
                                         reporter.report_with(||Diagnostic {
                                             r#type: DiagnosticType::MissingVariantIdentifier,
@@ -764,9 +841,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                                     None
                                 },
                             })
-                        }
-                        _ => unreachable!(),
-                    },
+                    }
                     _ => {
                         reporter.report_with(|| Diagnostic {
                             r#type: DiagnosticType::ExpectedListIdentifier,
@@ -808,45 +883,40 @@ where
     'b: 'c,
 {
     for segment in path {
-        match segment {
-            PathSegment {
-                tabular: Some(_), ..
-            } => unreachable!(),
+        let base = try_match!(
             PathSegment {
                 base,
-                tabular: None,
-            } => {
-                for path_element in base {
-                    let map = selected;
-                    let value = match &path_element.key {
-                        BasicPathElementKey::Plain(key) => &mut map.get_mut(key).unwrap().value,
+                tabular: None
+            } = segment
+            => base
+        )
+        .opaque_unwrap();
+        for path_element in base {
+            let map = selected;
+            let value = match &path_element.key {
+                BasicPathElementKey::Plain(key) => &mut map.get_mut(key).unwrap().value,
 
-                        BasicPathElementKey::List { key, .. } => {
-                            match &mut map.get_mut(key).unwrap().value {
-                                TamlValue::List(selected) => {
-                                    &mut selected.last_mut().unwrap().value
-                                }
-                                _ => unreachable!(),
-                            }
-                        }
-                    };
+                BasicPathElementKey::List { key, .. } => try_match!(
+                    TamlValue::List(selected)
+                    = &mut map.get_mut(key).unwrap().value
+                    => &mut selected.last_mut().unwrap().value
+                )
+                .opaque_unwrap(),
+            };
 
-                    selected = match (value, path_element.variant.as_ref()) {
-                        (TamlValue::Map(map), None) => map,
-                        (
-                            TamlValue::EnumVariant {
-                                key: existing_variant,
-                                payload: VariantPayload::Structured(fields),
-                            },
-                            Some(expected_variant),
-                        ) if existing_variant == expected_variant => fields,
-                        _ => unreachable!(),
-                    };
-                }
-            }
+            selected = match (value, path_element.variant.as_ref()) {
+                (TamlValue::Map(map), None) => map,
+                (
+                    TamlValue::EnumVariant {
+                        key: existing_variant,
+                        payload: VariantPayload::Structured(fields),
+                    },
+                    Some(expected_variant),
+                ) if existing_variant == expected_variant => fields,
+                _ => unreachable!(),
+            };
         }
     }
-
     selected
 }
 
@@ -959,38 +1029,40 @@ fn parse_key_value_pair<'a, Position: Clone>(
     reporter: &mut impl Reporter<Position>,
 ) -> Result<(Key<'a, Position>, Taml<'a, Position>), ()> {
     Ok(match iter.peek().map(|t| &t.token) {
-        Some(lexerToken::Identifier(_)) => match iter.next().unwrap() {
-            Token {
-                token: lexerToken::Identifier(key_name),
+        Some(lexerToken::Identifier(_)) => {
+            let (key_name, key_span) = try_match!(
+                Token {
+                    token: lexerToken::Identifier(_0),
+                    span: _1,
+                } = iter.next().unwrap()
+            )
+            .opaque_unwrap();
+
+            let key = Key {
+                name: key_name,
                 span: key_span,
-            } => {
-                let key = Key {
-                    name: key_name,
-                    span: key_span,
-                };
-                if matches!(
-                    iter.peek(),
-                    Some(&Token {
-                        token: lexerToken::Colon,
-                        ..
-                    })
-                ) {
-                    assert!(matches!(iter.next().unwrap(), Token{token:lexerToken::Colon,..}))
-                } else {
-                    reporter.report_with(|| Diagnostic {
-                        r#type: DiagnosticType::ExpectedKeyValuePair,
-                        labels: vec![DiagnosticLabel::new(
-                            "Expected colon.",
-                            iter.next().map(|t| t.span.start.clone()..t.span.start),
-                            DiagnosticLabelPriority::Primary,
-                        )],
-                    });
-                    return Err(());
-                }
-                (key, parse_value(iter, reporter)?)
+            };
+            if matches!(
+                iter.peek(),
+                Some(&Token {
+                    token: lexerToken::Colon,
+                    ..
+                })
+            ) {
+                assert!(matches!(iter.next().unwrap(), Token{token:lexerToken::Colon,..}))
+            } else {
+                reporter.report_with(|| Diagnostic {
+                    r#type: DiagnosticType::ExpectedKeyValuePair,
+                    labels: vec![DiagnosticLabel::new(
+                        "Expected colon.",
+                        iter.next().map(|t| t.span.start.clone()..t.span.start),
+                        DiagnosticLabelPriority::Primary,
+                    )],
+                });
+                return Err(());
             }
-            _ => unreachable!(),
-        },
+            (key, parse_value(iter, reporter)?)
+        }
 
         _ => {
             reporter.report_with(||Diagnostic {
@@ -1116,11 +1188,12 @@ fn parse_value<'a, Position: Clone>(
             // Enum variant
             (lexerToken::Identifier(str), key_span) => {
                 if iter.peek().map(|t| &t.token) == Some(&lexerToken::Paren) {
-                    match parse_value(iter, reporter)? {
+                    try_match!(
                         Taml {
                             span: list_span,
                             value: TamlValue::List(list),
-                        } => Taml {
+                        } = parse_value(iter, reporter)?
+                        => Taml {
                             span: key_span.start.clone()..list_span.end,
                             value: TamlValue::EnumVariant {
                                 key: Key {
@@ -1129,9 +1202,9 @@ fn parse_value<'a, Position: Clone>(
                                 },
                                 payload: VariantPayload::Tuple(list),
                             },
-                        },
-                        _ => unreachable!(),
-                    }
+                        }
+                    )
+                    .opaque_unwrap()
                 } else {
                     Taml {
                         span: key_span.clone(),

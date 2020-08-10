@@ -24,10 +24,12 @@ lazy_static = { version = "1.4.0", optional = true }
 lazy-transform-str = { path = "../lazy-transform-str" }
 linkme = { version = "0.2.2", optional = true }
 logos = "0.11.4"
+opaque-unwrap = { path = "../opaque-unwrap" }
 quit = { version = "1.1.0", optional = true }
 serde = { version = "1.0.114", default-features = false }
 serde-object-assistant-extra = { path = "../serde-object-assistant-extra", optional = true }
 smartstring = "0.2.3"
+try_match = "0.2.2"
 woc = { path = "../woc" }
 wyz = "0.2.0"
 
