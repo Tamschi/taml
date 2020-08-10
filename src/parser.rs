@@ -1244,11 +1244,23 @@ fn value<
     'a: 'b,
     'b,
     Iter: 'b + Iterator<Item = Token<'a, Position>>,
-    Reporter: 'b,
+    Reporter: 'b + diagnostics::Reporter<Position>,
     Position: 'b + Clone,
->() -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>>
-{
-    combi::first_match_open((string(), float(), integer(), variant()))
+>() -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Result<Taml<'a, Position>, ()> {
+    combi::require(
+        combi::first_match_open((string(), float(), integer(), variant())),
+        |next: Option<&Token<'a, Position>>, reporter: &mut Reporter| {
+            reporter.report_with(|| Diagnostic {
+                r#type: DiagnosticType::ExpectedValue,
+                labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
+                    None,
+                    next.map(|t| t.span.clone()),
+                    DiagnosticLabelPriority::Primary,
+                )],
+            });
+            Err(())
+        },
+    )
 }
 
 fn parse_value<'a, Position: Clone>(
