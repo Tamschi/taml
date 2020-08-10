@@ -79,6 +79,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "combi"
+version = "0.0.0"
+dependencies = [
+ "wyz",
+]
+
+[[package]]
 name = "dtoa"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -618,6 +625,7 @@ dependencies = [
  "cast",
  "codemap",
  "codemap-diagnostic",
+ "combi",
  "educe",
  "enum_properties",
  "gnaw",
