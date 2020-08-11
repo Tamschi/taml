@@ -1,4 +1,5 @@
 //TODO: Add secondary labels without caption while unrolling due to error. Disarm/return `Ok(())` with  `.void()` on that guard.
+//TODO: Extract this functionality into a separate serde_taml crate.
 
 use {
     crate::{
@@ -639,12 +640,12 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
     {
         #[cfg(feature = "serde-object-assist")]
         lazy_static::lazy_static! {
-            static ref HINT: std::sync::Mutex<Option<serde_object_assistant_extra::VariantKind>> = std::sync::Mutex::default();
+            static ref HINT: std::sync::Mutex<Option<serde_object::assistant::VariantKind>> = std::sync::Mutex::default();
         }
 
         #[cfg(feature = "serde-object-assist")]
-        #[linkme::distributed_slice(serde_object_assistant_extra::ENUM_VARIANT_ASSISTS)]
-        static ENUM_VARIANT_ASSIST: fn() -> Option<serde_object_assistant_extra::VariantKind> =
+        #[linkme::distributed_slice(serde_object::assistant::extra::ENUM_VARIANT_ASSISTS)]
+        static ENUM_VARIANT_ASSIST: fn() -> Option<serde_object::assistant::VariantKind> =
             || HINT.lock().unwrap().take();
 
         struct EnumAccess<'a, 'de, Position, Reporter: diagReporter<Position>>(
@@ -667,7 +668,7 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
 
                 #[cfg(feature = "serde-object-assist")]
                 {
-                    use serde_object_assistant_extra::VariantKind;
+                    use serde_object::assistant::VariantKind;
                     *HINT.lock().unwrap() = match &self.1 {
                         VariantPayload::Structured(map) => VariantKind::Struct(
                             map.keys()
