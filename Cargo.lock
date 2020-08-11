@@ -478,17 +478,10 @@ name = "serde-object"
 version = "0.0.0-dev"
 dependencies = [
  "lazy_static",
+ "linkme",
  "serde",
- "serde-object-assistant-extra",
  "try_match",
  "wyz",
-]
-
-[[package]]
-name = "serde-object-assistant-extra"
-version = "0.0.0-dev"
-dependencies = [
- "linkme",
 ]
 
 [[package]]
@@ -638,7 +631,7 @@ dependencies = [
  "opaque-unwrap",
  "quit",
  "serde",
- "serde-object-assistant-extra",
+ "serde-object",
  "smartstring",
  "try_match",
  "woc",
