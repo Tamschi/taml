@@ -11,7 +11,6 @@ use {
     std::{
         hash::Hash,
         iter::{self, Peekable},
-        marker::PhantomData,
         ops::{Deref, Range},
     },
     try_match::try_match,
@@ -1305,6 +1304,36 @@ fn value<
             Err(())
         },
     )
+}
+
+fn newline<'a, Iter: 'a + Iterator<Item = Token<'a, Position>>, Reporter: 'a, Position: 'a>(
+) -> impl 'a + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Range<Position>, ()>> {
+    combi::match_token!(|_| Token { token: lexerToken::Newline, span } => Ok(span))
+}
+
+fn comment<'a, Iter: 'a + Iterator<Item = Token<'a, Position>>, Reporter: 'a, Position: 'a>(
+) -> impl 'a + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Range<Position>, ()>> {
+    combi::match_token!(|_| Token { token: lexerToken::Comment(_), span } => Ok(span))
+}
+
+fn line_separation<
+    'a,
+    Iter: 'a + Iterator<Item = Token<'a, Position>>,
+    Reporter: 'a,
+    Position: 'a,
+>() -> impl 'a + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Range<Position>, ()>> {
+    let separator = || combi::first_match_open((comment(), newline()));
+
+    combi::sequence_open((separator(), move |first_range: Range<Position>| {
+        combi::map_closed(combi::repeat(move |_| separator()), |further_ranges, _| {
+            Ok(first_range.start
+                ..further_ranges
+                    .into_iter()
+                    .last()
+                    .map(|last| last.end)
+                    .unwrap_or(first_range.end))
+        })
+    }))
 }
 
 fn parse_value<'a, Position: Clone>(
