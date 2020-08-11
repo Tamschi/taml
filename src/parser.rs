@@ -1198,7 +1198,7 @@ fn raw_list<
         |paren_span| {
             combi::map_closed(
                 combi::first_match_closed((
-                    combi::match_peek!(Iter => |_: &mut Reporter| Some(Token { token: lexerToken::Thesis, span: _ }) => Ok(vec![])),
+                    combi::match_peek!(Iter => |_: &mut Reporter| Some(Token { token: lexerToken::Thesis, span: _ }) => Some(Ok(vec![]))),
                     combi::todo_closed(),
                 )),
                 |value: Vec<Taml<'a, Position>>, _| Ok((paren_span, value)),
