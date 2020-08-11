@@ -1192,20 +1192,20 @@ fn raw_list<
     &mut Peekable<Iter>,
     &mut Reporter,
 ) -> Option<Result<(Vec<Taml<'a, Position>>, Range<Position>), ()>> {
-    combi::sequence_open((
+    combi::sequence_refutable((
         paren(),
         |paren_span| {
-            combi::map_closed(
-                combi::first_match_closed((
+            combi::map_irrefutable(
+                combi::first_match_irrefutable((
                     combi::match_peek!(Iter => |_: &mut Reporter| Some(Token { token: lexerToken::Thesis, span: _ }) => Some(Ok(vec![]))),
-                    combi::todo_closed(),
+                    combi::todo_irrefutable(),
                 )),
                 |value: Vec<Taml<'a, Position>>, _| Ok((paren_span, value)),
             )
         },
         |(paren_span, value): (Range<Position>, _)| {
             combi::required(
-                combi::map_open(thesis(), {
+                combi::map_refutable(thesis(), {
                     let start = paren_span.start.clone();
                     |thesis_span, _| Ok((value, start..thesis_span.end))
                 }),
@@ -1240,9 +1240,9 @@ fn variant<
     Position: 'a + Clone,
 >() -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>>
 {
-    combi::sequence_open((key(), |key: Key<'a, Position>| {
-        combi::first_match_closed((
-            combi::map_open(raw_list(), {
+    combi::sequence_refutable((key(), |key: Key<'a, Position>| {
+        combi::first_match_irrefutable((
+            combi::map_refutable(raw_list(), {
                 let key = key.clone();
                 |(list, list_span), _| {
                     Ok(Taml {
@@ -1275,7 +1275,7 @@ fn list<
     Position: 'a + Clone,
 >() -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>>
 {
-    combi::map_open(raw_list(), |(vec, span), _| {
+    combi::map_refutable(raw_list(), |(vec, span), _| {
         Ok(Taml {
             span,
             value: TamlValue::List(vec),
@@ -1291,7 +1291,7 @@ fn value<
     Position: 'a + Clone,
 >() -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Result<Taml<'a, Position>, ()> {
     combi::required(
-        combi::first_match_open((string(), float(), integer(), variant(), list())),
+        combi::first_match_refutable((string(), float(), integer(), variant(), list())),
         |next: Option<&Token<'a, Position>>, reporter: &mut Reporter| {
             reporter.report_with(|| Diagnostic {
                 r#type: DiagnosticType::ExpectedValue,
@@ -1322,10 +1322,10 @@ fn line_separation<
     Reporter: 'a,
     Position: 'a,
 >() -> impl 'a + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Range<Position>, ()>> {
-    let separator = || combi::first_match_open((comment(), newline()));
+    let separator = || combi::first_match_refutable((comment(), newline()));
 
-    combi::sequence_open((separator(), move |first_range: Range<Position>| {
-        combi::map_closed(combi::repeat(move |_| separator()), |further_ranges, _| {
+    combi::sequence_refutable((separator(), move |first_range: Range<Position>| {
+        combi::map_irrefutable(combi::repeat(move |_| separator()), |further_ranges, _| {
             Ok(first_range.start
                 ..further_ranges
                     .into_iter()
