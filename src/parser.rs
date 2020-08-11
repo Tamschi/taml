@@ -1183,17 +1183,18 @@ fn list<
     Iter: 'a + Iterator<Item = Token<'a, Position>>,
     Reporter: 'a + diagnostics::Reporter<Position>,
     Position: 'a + Clone,
->(
-    inner: impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Result<Taml<'a, Position>, ()>,
-) -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>>
-{
+>() -> impl 'b
+       + FnOnce(
+    &mut Peekable<Iter>,
+    &mut Reporter,
+) -> Option<Result<(Vec<Taml<'a, Position>>, Position), ()>> {
     combi::sequence((
         paren(),
-        |paren_span| combi::map_closed(inner, |value, _| Ok((paren_span, value))),
+        |paren_span| combi::map_closed(combi::todo_closed(), |value, _| Ok((paren_span, value))),
         |(paren_span, value)| {
-            combi::require(
-                combi::map_open(thesis(), |_, _: &mut Reporter| Ok(value)),
-                |next: Option<&Token<'a, Position>>, reporter| {
+            combi::required(
+                combi::map_open(thesis(), |_, _| Ok(value)),
+                |next: Option<&Token<'a, Position>>, reporter: &mut Reporter| {
                     reporter.report_with(|| Diagnostic {
                         r#type: DiagnosticType::UnclosedList,
                         labels: vec![
@@ -1219,14 +1220,25 @@ fn list<
 fn variant<
     'a: 'b,
     'b,
-    Iter: 'b + Iterator<Item = Token<'a, Position>>,
-    Reporter: 'b,
-    Position: 'b + Clone,
+    Iter: 'a + Iterator<Item = Token<'a, Position>>,
+    Reporter: 'a + diagnostics::Reporter<Position>,
+    Position: 'a + Clone,
 >() -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>>
 {
     combi::sequence((key(), |key: Key<'a, Position>| {
         combi::first_match_closed((
-            combi::todo(),
+            combi::map_open(list(), {
+                let key = key.clone();
+                |(list, end), _| {
+                    Ok(Taml {
+                        span: key.span.start.clone()..end,
+                        value: TamlValue::EnumVariant {
+                            key,
+                            payload: VariantPayload::Tuple(list),
+                        },
+                    })
+                }
+            }),
             combi::accept(|_, _| {
                 Ok(Taml {
                     span: key.span.clone(),
@@ -1243,11 +1255,11 @@ fn variant<
 fn value<
     'a: 'b,
     'b,
-    Iter: 'b + Iterator<Item = Token<'a, Position>>,
-    Reporter: 'b + diagnostics::Reporter<Position>,
-    Position: 'b + Clone,
+    Iter: 'a + Iterator<Item = Token<'a, Position>>,
+    Reporter: 'a + diagnostics::Reporter<Position>,
+    Position: 'a + Clone,
 >() -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Result<Taml<'a, Position>, ()> {
-    combi::require(
+    combi::required(
         combi::first_match_open((string(), float(), integer(), variant())),
         |next: Option<&Token<'a, Position>>, reporter: &mut Reporter| {
             reporter.report_with(|| Diagnostic {
