@@ -1116,7 +1116,7 @@ fn string<
     Position: 'b,
 >() -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>>
 {
-    combi::match_map!(|token, _| Token {
+    combi::match_token!(|_| Token {
         token: lexerToken::String(str),
         span,
     } => Ok(Taml {
@@ -1133,7 +1133,7 @@ fn float<
     Position: 'b,
 >() -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>>
 {
-    combi::match_map!(|token, _| Token {
+    combi::match_token!(|_| Token {
         token: lexerToken::Float(str),
         span,
     } => Ok(Taml {
@@ -1150,7 +1150,7 @@ fn integer<
     Position: 'b,
 >() -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>>
 {
-    combi::match_map!(|token, _| Token {
+    combi::match_token!(|_| Token {
         token: lexerToken::Integer(str),
         span,
     } => Ok(Taml {
@@ -1161,7 +1161,7 @@ fn integer<
 
 fn key<'a: 'b, 'b, Iter: 'b + Iterator<Item = Token<'a, Position>>, Reporter: 'b, Position: 'b>(
 ) -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Key<'a, Position>, ()>> {
-    combi::match_map!(|token, _| Token {
+    combi::match_token!(|_| Token {
         token: lexerToken::Identifier(name),
         span,
     } => Ok(Key { name, span }))
@@ -1169,15 +1169,20 @@ fn key<'a: 'b, 'b, Iter: 'b + Iterator<Item = Token<'a, Position>>, Reporter: 'b
 
 fn paren<'a, Iter: 'a + Iterator<Item = Token<'a, Position>>, Reporter: 'a, Position: 'a>(
 ) -> impl 'a + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Range<Position>, ()>> {
-    combi::match_map!(|token, _| Token { token: lexerToken::Paren, span } => Ok(span))
+    combi::match_token!(|_| Token { token: lexerToken::Paren, span } => Ok(span))
 }
 
 fn thesis<'a, Iter: 'a + Iterator<Item = Token<'a, Position>>, Reporter: 'a, Position: 'a>(
 ) -> impl 'a + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Range<Position>, ()>> {
-    combi::match_map!(|token, _| Token { token: lexerToken::Thesis, span } => Ok(span))
+    combi::match_token!(|_| Token { token: lexerToken::Thesis, span } => Ok(span))
 }
 
-fn list<
+fn comma<'a, Iter: 'a + Iterator<Item = Token<'a, Position>>, Reporter: 'a, Position: 'a>(
+) -> impl 'a + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Range<Position>, ()>> {
+    combi::match_token!(|_| Token { token: lexerToken::Comma, span } => Ok(span))
+}
+
+fn raw_list<
     'a: 'b,
     'b,
     Iter: 'a + Iterator<Item = Token<'a, Position>>,
@@ -1187,13 +1192,24 @@ fn list<
        + FnOnce(
     &mut Peekable<Iter>,
     &mut Reporter,
-) -> Option<Result<(Vec<Taml<'a, Position>>, Position), ()>> {
-    combi::sequence((
+) -> Option<Result<(Vec<Taml<'a, Position>>, Range<Position>), ()>> {
+    combi::sequence_open((
         paren(),
-        |paren_span| combi::map_closed(combi::todo_closed(), |value, _| Ok((paren_span, value))),
-        |(paren_span, value)| {
+        |paren_span| {
+            combi::map_closed(
+                combi::first_match_closed((
+                    combi::match_peek!(Iter => |_: &mut Reporter| Some(Token { token: lexerToken::Thesis, span: _ }) => Ok(vec![])),
+                    combi::todo_closed(),
+                )),
+                |value: Vec<Taml<'a, Position>>, _| Ok((paren_span, value)),
+            )
+        },
+        |(paren_span, value): (Range<Position>, _)| {
             combi::required(
-                combi::map_open(thesis(), |_, _| Ok(value)),
+                combi::map_open(thesis(), {
+                    let start = paren_span.start.clone();
+                    |thesis_span, _| Ok((value, start..thesis_span.end))
+                }),
                 |next: Option<&Token<'a, Position>>, reporter: &mut Reporter| {
                     reporter.report_with(|| Diagnostic {
                         r#type: DiagnosticType::UnclosedList,
@@ -1225,13 +1241,13 @@ fn variant<
     Position: 'a + Clone,
 >() -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>>
 {
-    combi::sequence((key(), |key: Key<'a, Position>| {
+    combi::sequence_open((key(), |key: Key<'a, Position>| {
         combi::first_match_closed((
-            combi::map_open(list(), {
+            combi::map_open(raw_list(), {
                 let key = key.clone();
-                |(list, end), _| {
+                |(list, list_span), _| {
                     Ok(Taml {
-                        span: key.span.start.clone()..end,
+                        span: key.span.start.clone()..list_span.end,
                         value: TamlValue::EnumVariant {
                             key,
                             payload: VariantPayload::Tuple(list),
@@ -1252,6 +1268,22 @@ fn variant<
     }))
 }
 
+fn list<
+    'a: 'b,
+    'b,
+    Iter: 'a + Iterator<Item = Token<'a, Position>>,
+    Reporter: 'a + diagnostics::Reporter<Position>,
+    Position: 'a + Clone,
+>() -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Option<Result<Taml<'a, Position>, ()>>
+{
+    combi::map_open(raw_list(), |(vec, span), _| {
+        Ok(Taml {
+            span,
+            value: TamlValue::List(vec),
+        })
+    })
+}
+
 fn value<
     'a: 'b,
     'b,
@@ -1260,7 +1292,7 @@ fn value<
     Position: 'a + Clone,
 >() -> impl 'b + FnOnce(&mut Peekable<Iter>, &mut Reporter) -> Result<Taml<'a, Position>, ()> {
     combi::required(
-        combi::first_match_open((string(), float(), integer(), variant())),
+        combi::first_match_open((string(), float(), integer(), variant(), list())),
         |next: Option<&Token<'a, Position>>, reporter: &mut Reporter| {
             reporter.report_with(|| Diagnostic {
                 r#type: DiagnosticType::ExpectedValue,
