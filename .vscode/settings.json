@@ -6,6 +6,5 @@
         "TODO",
         "XXX",
         "todo!"
-    ],
-    "todo-tree.regex.regex": "(($TAGS)|^\\s*- \\[ \\])"
+    ]
 }
