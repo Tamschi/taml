@@ -635,7 +635,6 @@ dependencies = [
  "cast",
  "codemap",
  "codemap-diagnostic",
- "combi",
  "educe",
  "enum_properties",
  "gnaw",
