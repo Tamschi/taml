@@ -296,40 +296,80 @@ pub fn parse<'a, Position: Clone>(
 
     let mut selection = &mut taml;
 
+    #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+    enum ParserState {
+        LineStart,
+        Comment,
+        Other,
+    }
+    impl ParserState {
+        fn can_comment(&self) -> bool {
+            match self {
+                ParserState::LineStart => true,
+                ParserState::Comment => false,
+                ParserState::Other => true,
+            }
+        }
+
+        fn can_newline(&self) -> bool {
+            true
+        }
+
+        fn can_heading(&self) -> bool {
+            *self == ParserState::LineStart
+        }
+
+        fn can_data(&self) -> bool {
+            *self == ParserState::LineStart
+        }
+    }
+
+    let mut state = ParserState::LineStart;
     while let Some(next) = iter.peek().map(|t| &t.token) {
-        match next {
+        state = match next {
             lexerToken::Error => {
                 // Stop parsing but collect all the tokenizer reporter.
                 reporter.report_many_with(|| {
-                    iter::once(iter.next().unwrap().span)
-                        .chain(iter.filter_map(|t| {
-                            if let Token {
-                                token: lexerToken::Error,
-                                span,
-                            } = t
-                            {
-                                Some(span)
-                            } else {
-                                None
-                            }
-                        }))
-                        .map(|span| Diagnostic {
-                            r#type: DiagnosticType::UnrecognizedToken,
-                            labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
-                                None,
-                                span,
-                                DiagnosticLabelPriority::Primary,
-                            )],
-                        })
+                    iter.filter_map(|t| {
+                        if let Token {
+                            token: lexerToken::Error,
+                            span,
+                        } = t
+                        {
+                            Some(span)
+                        } else {
+                            None
+                        }
+                    })
+                    .map(|span| Diagnostic {
+                        r#type: DiagnosticType::UnrecognizedToken,
+                        labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
+                            None,
+                            span,
+                            DiagnosticLabelPriority::Primary,
+                        )],
+                    })
                 });
                 return Err(());
             }
 
+            lexerToken::Comment(_) if state.can_comment() => {
+                assert!(matches!(iter.next().unwrap().token, lexerToken::Comment(_)));
+                ParserState::Comment
+            }
             lexerToken::Comment(_) => {
-                assert!(matches!(iter.next().unwrap().token, lexerToken::Comment(_)))
+                reporter.report_with(|| Diagnostic {
+                    r#type: DiagnosticType::MisplacedComment,
+                    labels: vec![DiagnosticLabel::new(
+                        "This comment appears after another comment without newline in-between, which shouldn't be possible.",
+                        iter.next().unwrap().span,
+                        DiagnosticLabelPriority::Primary,
+                    )]
+                });
+                ParserState::Comment
             }
 
-            lexerToken::HeadingHashes(_) => {
+            lexerToken::HeadingHashes(_) if state.can_heading() => {
                 let (depth, hashes_span) = match iter.next().unwrap() {
                     Token {
                         token: lexerToken::HeadingHashes(count),
@@ -402,11 +442,29 @@ pub fn parse<'a, Position: Clone>(
                 }
 
                 path.push(new_segment);
+
+                ParserState::Other
+            }
+            lexerToken::HeadingHashes(_) => {
+                let start = iter.next().unwrap().span.start;
+                reporter.report_with(|| Diagnostic {
+                    r#type: DiagnosticType::MisplacedHeading,
+                    labels: vec![DiagnosticLabel::new(
+                        "Expected newline before heading.",
+                        start.clone()..start,
+                        DiagnosticLabelPriority::Primary,
+                    )],
+                });
+                ParserState::Comment
             }
 
-            lexerToken::Newline => assert_eq!(iter.next().unwrap().token, lexerToken::Newline),
+            lexerToken::Newline => {
+                assert_eq!(iter.next().unwrap().token, lexerToken::Newline);
+                ParserState::LineStart
+            }
 
-            _ => {
+            // Data
+            _ if state.can_data() => {
                 #[allow(clippy::single_match_else)]
                 match path.last().and_then(|s| s.tabular.as_ref()) {
                     Some(tabular) => {
@@ -443,7 +501,25 @@ pub fn parse<'a, Position: Clone>(
                             return Err(());
                         }
                     }
-                }
+                };
+
+                ParserState::Other
+            }
+            _ => {
+                let start = iter.next().unwrap().span.start;
+                reporter.report_with(|| Diagnostic {
+                    r#type: DiagnosticType::MisplacedData,
+                    labels: vec![DiagnosticLabel::new(
+                        if path.last().and_then(|s| s.tabular.as_ref()).is_some() {
+                            "Expected either a comma (to continue this row) or a newline (before the next table row) here."
+                        } else {
+                            "Expected a newline before next key-value-pair."
+                        },
+                        start.clone()..start,
+                        DiagnosticLabelPriority::Primary,
+                    )]
+                });
+                ParserState::Comment
             }
         }
     }

@@ -159,6 +159,27 @@ enum_properties! {
             title: "Non-map value selected",
         },
 
+        MisplacedComment {
+            group: DiagnosticGroup::Parsing,
+            code: 17,
+            level: DiagnosticLevel::Error,
+            title: "Misplaced comment",
+        },
+
+        MisplacedHeading {
+            group: DiagnosticGroup::Parsing,
+            code: 18,
+            level: DiagnosticLevel::Error,
+            title: "Misplaced heading",
+        },
+
+        MisplacedData {
+            group: DiagnosticGroup::Parsing,
+            code: 19,
+            level: DiagnosticLevel::Error,
+            title: "Misplaced data",
+        },
+
         CustomErrorFromVisitor {
             group: DiagnosticGroup::Deserialising,
             code: 0,
@@ -212,7 +233,7 @@ enum_properties! {
 
 impl Display for DiagnosticType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "TAML-{}{:04} {}", self.group.code, self.code, self.title)
+        write!(f, "TAML-{}{:03} {}", self.group.code, self.code, self.title)
     }
 }
 
