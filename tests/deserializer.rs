@@ -1,59 +1,60 @@
-use {serde::Deserialize, taml::deserializer::from_str};
+use serde::Deserialize;
+use taml::deserializer::from_str;
 
 //TODO: Split up this test.
 #[test]
 fn deserializer() {
-    #[derive(Debug, Deserialize, PartialEq)]
-    struct Deserializable {
-        #[serde(default)]
-        none: Option<()>,
-        #[serde(default)]
-        some: Option<()>,
+	#[derive(Debug, Deserialize, PartialEq)]
+	struct Deserializable {
+		#[serde(default)]
+		none: Option<()>,
+		#[serde(default)]
+		some: Option<()>,
 
-        unit: (),
+		unit: (),
 
-        seq: Vec<u8>,
+		seq: Vec<u8>,
 
-        zero_u8: u8,
-        one_u8: u8,
+		zero_u8: u8,
+		one_u8: u8,
 
-        zero_i8: i8,
-        one_i8: i8,
-        minus_one_i8: i8,
+		zero_i8: i8,
+		one_i8: i8,
+		minus_one_i8: i8,
 
-        empty_table: Vec<()>,
+		empty_table: Vec<()>,
 
-        tabular: Vec<Tabular>,
+		tabular: Vec<Tabular>,
 
-        variants: Vec<Enum>,
+		variants: Vec<Enum>,
 
-        unit_variant: Enum,
-        weird_variant: Enum,
-        newtype_variant: Enum,
-        tuple_variant: Enum,
+		unit_variant: Enum,
+		weird_variant: Enum,
+		newtype_variant: Enum,
+		tuple_variant: Enum,
 
-        r#false: bool,
-        r#true: bool,
-    }
+		r#false: bool,
+		r#true: bool,
+	}
 
-    #[derive(Debug, Deserialize, PartialEq)]
-    enum Enum {
-        Structured { i32: i32, f64: f64 },
-        Tuple(u8, u8),
-        Newtype(u8),
-        Unit,
-        Weird(),
-    }
+	#[derive(Debug, Deserialize, PartialEq)]
+	enum Enum {
+		Structured { i32: i32, f64: f64 },
+		Tuple(u8, u8),
+		Newtype(u8),
+		Unit,
+		Weird(),
+	}
 
-    #[derive(Debug, Deserialize, PartialEq)]
-    struct Tabular {
-        first: u8,
-        second: u8,
-    }
+	#[derive(Debug, Deserialize, PartialEq)]
+	struct Tabular {
+		first: u8,
+		second: u8,
+	}
 
-    assert_eq!(
-        dbg!(from_str(
-            "
+	assert_eq!(
+		dbg!(from_str(
+			"
                 some: ()
 
                 #
@@ -103,58 +104,58 @@ fn deserializer() {
                 false: false
                 true: true
             ",
-            &mut ()
-        )),
-        Ok(Deserializable {
-            none: None,
-            some: Some(()),
+			&mut ()
+		)),
+		Ok(Deserializable {
+			none: None,
+			some: Some(()),
 
-            unit: (),
+			unit: (),
 
-            seq: vec![0, 1, 2],
+			seq: vec![0, 1, 2],
 
-            zero_u8: 0,
-            one_u8: 1,
+			zero_u8: 0,
+			one_u8: 1,
 
-            zero_i8: 0,
-            one_i8: 1,
-            minus_one_i8: -1,
+			zero_i8: 0,
+			one_i8: 1,
+			minus_one_i8: -1,
 
-            empty_table: vec![],
+			empty_table: vec![],
 
-            tabular: vec![
-                Tabular {
-                    first: 0,
-                    second: 1,
-                },
-                Tabular {
-                    first: 2,
-                    second: 3,
-                },
-                Tabular {
-                    first: 4,
-                    second: 5,
-                },
-            ],
+			tabular: vec![
+				Tabular {
+					first: 0,
+					second: 1,
+				},
+				Tabular {
+					first: 2,
+					second: 3,
+				},
+				Tabular {
+					first: 4,
+					second: 5,
+				},
+			],
 
-            variants: vec![
-                Enum::Structured {
-                    i32: 12345,
-                    f64: 6789.0
-                },
-                Enum::Tuple(0, 1),
-                Enum::Newtype(3),
-                Enum::Unit,
-                Enum::Weird(),
-            ],
+			variants: vec![
+				Enum::Structured {
+					i32: 12345,
+					f64: 6789.0
+				},
+				Enum::Tuple(0, 1),
+				Enum::Newtype(3),
+				Enum::Unit,
+				Enum::Weird(),
+			],
 
-            unit_variant: Enum::Unit,
-            weird_variant: Enum::Weird(),
-            newtype_variant: Enum::Newtype(4),
-            tuple_variant: Enum::Tuple(5, 6),
+			unit_variant: Enum::Unit,
+			weird_variant: Enum::Weird(),
+			newtype_variant: Enum::Newtype(4),
+			tuple_variant: Enum::Tuple(5, 6),
 
-            r#false: false,
-            r#true: true,
-        })
-    );
+			r#false: false,
+			r#true: true,
+		})
+	);
 }
