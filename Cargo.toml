@@ -4,6 +4,7 @@ version = "0.0.0-dev"
 authors = ["Tamme Schichler <tamme@schichler.dev>"]
 edition = "2018"
 publish = false
+readme = "README.md"
 
 [lib]
 
@@ -42,7 +43,7 @@ serde-object-assist = ["lazy_static", "linkme", "serde-object/assistant-extra"]
 cast = "0.2.3"
 codemap = "0.1.3"
 codemap-diagnostic = "0.1.1"
-indexmap = { version = "*", features = ["serde-1"] }
 educe = { version = "0.4.13", default-features = false, features = ["PartialEq", "Eq"] }
-serde = { version = "1.0.114", default-features = false, features = ["derive", "std"] }
+indexmap = { version = "*", features = ["serde-1"] }
 maplit = "1.0.2"
+serde = { version = "1.0.114", default-features = false, features = ["derive", "std"] }

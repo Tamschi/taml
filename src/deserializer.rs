@@ -766,6 +766,7 @@ impl<'a, 'de, Position: Clone + Ord, Reporter: diagReporter<Position>> de::Deser
                 #[cfg(feature = "serde-object-assist")]
                 HINT.lock().unwrap().take();
 
+                //TODO: Support extra-fields!
                 match self.payload {
                     VariantPayload::Structured(fields) => de::Deserializer::deserialize_map(
                         MapDeserializer {
