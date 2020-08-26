@@ -1,5 +1,7 @@
-pub mod deserializer;
 pub mod diagnostics;
 pub mod formatting;
-pub mod parser;
-pub mod token;
+pub mod parsing;
+mod token;
+
+pub use parsing::parse;
+pub use token::Token;

@@ -1,3 +1,4 @@
+use cervine::Cow;
 use gnaw::Unshift as _;
 use lazy_transform_str::{
 	escape_double_quotes, unescape_backslashed_verbatim, Transform as _, TransformedPart,
@@ -8,9 +9,8 @@ use std::{
 	fmt::{Display, Formatter, Result as fmtResult},
 	iter,
 };
-use woc::Woc;
 
-fn escape_identifier(string: &str) -> Woc<String, str> {
+fn escape_identifier(string: &str) -> Cow<String, str> {
 	let mut quote = if let Some(first) = string.chars().next() {
 		first == '-' || first.is_ascii_digit()
 	} else {
@@ -38,13 +38,13 @@ fn escape_identifier(string: &str) -> Woc<String, str> {
 		let mut quoted = String::from("`");
 		quoted.push_str(&escaped_name);
 		quoted.push('`');
-		Woc::Owned(quoted)
+		Cow::Owned(quoted)
 	} else {
 		escaped_name
 	}
 }
 
-fn unescape_quoted_identifier(string: &str) -> Woc<String, str> {
+fn unescape_quoted_identifier(string: &str) -> Cow<String, str> {
 	assert!(string.starts_with('`'));
 	assert!(string.ends_with('`'));
 	let string = &string['`'.len_utf8()..string.len() - '`'.len_utf8()];
@@ -112,7 +112,7 @@ pub enum Token<'a> {
 	Period,
 
 	#[regex(r#""([^\\"]|\\\\|\\")*""#, |lex| unescape_backslashed_verbatim(&lex.slice()[1..lex.slice().len() - 1]))]
-	String(Woc<'a, String, str>),
+	String(Cow<'a, String, str>),
 
 	#[regex(r"-?\d+\.\d+", |lex| trim_trailing_0s(trim_leading_0s(lex.slice())))]
 	Float(&'a str),
@@ -123,9 +123,9 @@ pub enum Token<'a> {
 	#[token(":")]
 	Colon,
 
-	#[regex(r"[a-zA-Z_][a-zA-Z\-_0-9]*", |lex| Woc::Borrowed(lex.slice()))]
+	#[regex(r"[a-zA-Z_][a-zA-Z\-_0-9]*", |lex| Cow::Borrowed(lex.slice()))]
 	#[regex(r"`([^\\`]|\\\\|\\`)*`", |lex| unescape_quoted_identifier(lex.slice()))]
-	Identifier(Woc<'a, String, str>),
+	Identifier(Cow<'a, String, str>),
 
 	#[error]
 	#[regex(r"[ \r\t]+", logos::skip)]
@@ -189,47 +189,47 @@ fn lex() {
 			HeadingHashes(1),
 			Brac,
 			Brac,
-			Identifier(Woc::Borrowed("loops")),
+			Identifier(Cow::Borrowed("loops")),
 			Ket,
 			Period,
 			Bra,
-			Identifier(Woc::Borrowed("sound")),
+			Identifier(Cow::Borrowed("sound")),
 			Comma,
-			Identifier(Woc::Borrowed("volume")),
+			Identifier(Cow::Borrowed("volume")),
 			Ce,
 			Ket,
 			Newline,
-			String(Woc::Borrowed("$sewer/amb_drips")),
+			String(Cow::Borrowed("$sewer/amb_drips")),
 			Comma,
 			Float("0.8"),
 			Newline,
-			String(Woc::Borrowed("$sewer/amb_flies")),
+			String(Cow::Borrowed("$sewer/amb_flies")),
 			Comma,
 			Float("0.1"),
 			Newline,
-			String(Woc::Borrowed("$sewer/amb_hum")),
+			String(Cow::Borrowed("$sewer/amb_hum")),
 			Comma,
 			Float("0.05"),
 			Newline,
 			Newline,
 			HeadingHashes(1),
 			Brac,
-			Identifier(Woc::Borrowed("moments")),
+			Identifier(Cow::Borrowed("moments")),
 			Ket,
 			Newline,
-			Identifier(Woc::Borrowed("sound")),
+			Identifier(Cow::Borrowed("sound")),
 			Colon,
-			String(Woc::Borrowed("$sewer/moments/*")),
+			String(Cow::Borrowed("$sewer/moments/*")),
 			Newline,
-			Identifier(Woc::Borrowed("layers")),
+			Identifier(Cow::Borrowed("layers")),
 			Colon,
 			Integer("1"),
 			Newline,
-			Identifier(Woc::Borrowed("first-interval-no-min")),
+			Identifier(Cow::Borrowed("first-interval-no-min")),
 			Colon,
-			Identifier(Woc::Borrowed("true")),
+			Identifier(Cow::Borrowed("true")),
 			Newline,
-			Identifier(Woc::Borrowed("interval-range")),
+			Identifier(Cow::Borrowed("interval-range")),
 			Colon,
 			Paren,
 			Integer("10"),
@@ -237,7 +237,7 @@ fn lex() {
 			Integer("60"),
 			Thesis,
 			Newline,
-			Identifier(Woc::Borrowed("volume-range")),
+			Identifier(Cow::Borrowed("volume-range")),
 			Colon,
 			Paren,
 			Float("0.1"),

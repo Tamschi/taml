@@ -2,16 +2,16 @@ use crate::{
 	diagnostics::{Diagnostic, DiagnosticLabel, DiagnosticLabelPriority, DiagnosticType, Reporter},
 	token::Token as lexerToken,
 };
+use cervine::Cow;
+use debugless_unwrap::DebuglessUnwrap as _;
 use indexmap::{map, IndexMap};
-use opaque_unwrap::OpaqueUnwrap as _;
 use smartstring::alias::String;
 use std::{
 	hash::Hash,
-	iter::{self, Peekable},
+	iter::Peekable,
 	ops::{Deref, Range},
 };
 use try_match::try_match;
-use woc::Woc;
 
 pub trait IntoToken<'a, Position> {
 	fn into_token(self) -> Token<'a, Position>;
@@ -75,7 +75,7 @@ impl<'a, Position> Taml<'a, Position> {
 
 #[derive(Debug, Clone)]
 pub enum TamlValue<'a, Position> {
-	String(Woc<'a, String, str>),
+	String(Cow<'a, String, str>),
 	Integer(&'a str),
 	Float(&'a str),
 	List(List<'a, Position>),
@@ -138,7 +138,7 @@ struct TabularPathSegment<'a, Position: Clone> {
 
 #[derive(Clone, Debug)]
 pub struct Key<'a, Position> {
-	pub name: Woc<'a, String, str>,
+	pub name: Cow<'a, String, str>,
 	pub span: Range<Position>,
 }
 
@@ -208,7 +208,7 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
 		fn placeholder<'a, Position: Clone>(position: Position) -> Taml<'a, Position> {
 			Taml {
 				span: position.clone()..position,
-				value: TamlValue::String(Woc::Borrowed("PLACEHOLDER")),
+				value: TamlValue::String(Cow::Borrowed("PLACEHOLDER")),
 			}
 		}
 
@@ -218,7 +218,7 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
 				= selection.entry(key.clone())
 				=> vacant.insert(placeholder(key.span.start.clone()))
 			)
-			.opaque_unwrap(),
+			.debugless_unwrap(),
 
 			BasicPathElementKey::List { key, span } => {
 				let list = selection
@@ -305,10 +305,6 @@ pub fn parse<'a, Position: Clone>(
 				ParserState::Comment => false,
 				ParserState::Other => true,
 			}
-		}
-
-		fn can_newline(&self) -> bool {
-			true
 		}
 
 		fn can_heading(&self) -> bool {
@@ -547,7 +543,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
 						token: lexerToken::Identifier(_0),
 					} = iter.next().unwrap()
 				)
-				.opaque_unwrap();
+				.debugless_unwrap();
 				base.push(BasicPathElement {
                     key: BasicPathElementKey::Plain(Key{name:key, span:key_span}),
                     variant: if iter.peek().map(|t| &t.token) == Some(&lexerToken::Colon) {
@@ -575,7 +571,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
                                 name: variant,
                                 span:variant_span,
                             })
-                        ).opaque_unwrap()
+                        ).debugless_unwrap()
                     } else {
                         None
                     },
@@ -595,14 +591,14 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
 								token: lexerToken::Identifier(_0),
 							} = iter.next().unwrap()
 						)
-						.opaque_unwrap();
+						.debugless_unwrap();
 						let ket_end = match iter.peek().map(|t| &t.token) {
 							Some(lexerToken::Ket) => try_match!(
 								Token { token: lexerToken::Ket, span }
 								= iter.next().unwrap()
 								=> span.end
 							)
-							.opaque_unwrap(),
+							.debugless_unwrap(),
 							_ => {
 								reporter.report_with(|| Diagnostic {
 									r#type: DiagnosticType::UnclosedListKey,
@@ -656,7 +652,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
 										span:variant_span,
 									})
 								)
-								.opaque_unwrap()
+								.debugless_unwrap()
 							} else {
 								None
 							},
@@ -808,7 +804,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
 						token: lexerToken::Identifier(_0),
 					} = iter.next().unwrap()
 				)
-				.opaque_unwrap();
+				.debugless_unwrap();
 
 				base.push(BasicPathElement {
 					key: BasicPathElementKey::Plain(Key {
@@ -841,7 +837,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
 								span,
 							})
 						)
-						.opaque_unwrap()
+						.debugless_unwrap()
 					} else {
 						None
 					},
@@ -854,7 +850,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
 					= iter.next().unwrap()
 					=> span.start
 				)
-				.opaque_unwrap();
+				.debugless_unwrap();
 				match iter.peek().map(|t| &t.token) {
 					Some(lexerToken::Identifier(_)) => {
 						let (str, str_span) = try_match!(
@@ -863,7 +859,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
 								token: lexerToken::Identifier(_0),
 							} = iter.next().unwrap()
 						)
-						.opaque_unwrap();
+						.debugless_unwrap();
 
 						let ket_end = match iter.peek().map(|t| &t.token) {
 							Some(lexerToken::Ket) => {
@@ -897,7 +893,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
                                             Token{span, token:lexerToken::Identifier(str)}
                                             = iter.next().unwrap()
                                             => Some(Key{name: str, span})
-                                        ).opaque_unwrap()
+                                        ).debugless_unwrap()
                                     } else {
                                         reporter.report_with(||Diagnostic {
                                             r#type: DiagnosticType::MissingVariantIdentifier,
@@ -962,7 +958,7 @@ where
 			} = segment
 			=> base
 		)
-		.opaque_unwrap();
+		.debugless_unwrap();
 		for path_element in base {
 			let map = selected;
 			let value = match &path_element.key {
@@ -973,7 +969,7 @@ where
 					= &mut map.get_mut(key).unwrap().value
 					=> &mut selected.last_mut().unwrap().value
 				)
-				.opaque_unwrap(),
+				.debugless_unwrap(),
 			};
 
 			selected = match (value, path_element.variant.as_ref()) {
@@ -1108,7 +1104,7 @@ fn parse_key_value_pair<'a, Position: Clone>(
 					span: _1,
 				} = iter.next().unwrap()
 			)
-			.opaque_unwrap();
+			.debugless_unwrap();
 
 			let key = Key {
 				name: key_name,
@@ -1276,7 +1272,7 @@ fn parse_value<'a, Position: Clone>(
 							},
 						}
 					)
-					.opaque_unwrap()
+					.debugless_unwrap()
 				} else {
 					Taml {
 						span: key_span.clone(),

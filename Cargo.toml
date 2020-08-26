@@ -1,49 +1,25 @@
 [package]
 name = "taml"
-version = "0.0.0-dev"
+version = "0.0.1"
 authors = ["Tamme Schichler <tamme@schichler.dev>"]
 edition = "2018"
+description = "A kind-to-humans configuration language"
+license = "MPL-2.0"
+repository = "https://github.com/Tamschi/taml"
 publish = false
 readme = "README.md"
-
-[lib]
-
-[[bin]]
-name = "taml"
-doc = false
-required-features = ["bin-dependencies"]
+include = [
+	"**/*.rs",
+	"Cargo.toml",
+]
 
 [dependencies]
-argh = { version = "0.1.3", optional = true }
-cast = { version = "0.2.3", optional = true }
-codemap = { version = "0.1.3", optional = true }
-codemap-diagnostic = { version = "0.1.1", optional = true }
+cervine = "0.0.2"
+debugless-unwrap = "0.0.1"
 enum_properties = "0.2.1"
-gnaw = { path = "../gnaw" }
+gnaw = "0.0.1"
 indexmap = "1.5.0"
-lazy_static = { version = "1.4.0", optional = true }
-lazy-transform-str = { path = "../lazy-transform-str" }
-linkme = { version = "0.2.2", optional = true }
+lazy-transform-str = "0.0.1"
 logos = "0.11.4"
-opaque-unwrap = { path = "../opaque-unwrap" }
-quit = { version = "1.1.0", optional = true }
-serde = { version = "1.0.114", default-features = false }
-serde-object = { path = "../serde-object", optional = true }
 smartstring = "0.2.3"
 try_match = "0.2.2"
-woc = { path = "../woc" }
-wyz = "0.2.0"
-
-[features]
-bin-dependencies = ["argh", "cast", "codemap", "codemap-diagnostic", "quit"]
-default = ["bin-dependencies"]
-serde-object-assist = ["lazy_static", "linkme", "serde-object/assistant-extra"]
-
-[dev-dependencies]
-cast = "0.2.3"
-codemap = "0.1.3"
-codemap-diagnostic = "0.1.1"
-educe = { version = "0.4.13", default-features = false, features = ["PartialEq", "Eq"] }
-indexmap = { version = "*", features = ["serde-1"] }
-maplit = "1.0.2"
-serde = { version = "1.0.114", default-features = false, features = ["derive", "std"] }
