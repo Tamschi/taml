@@ -92,7 +92,7 @@ TAML (always UTF-8 where applicable) can represent much of the [Serde data model
 
     However, you can collect them in a **map** by adding a field with the name `"taml::extra_fields"`. Use [`#[serde(rename = "taml::extra_fields")]`](https://serde.rs/field-attrs.html#rename) or equivalent.
 
-<--
+<!--
 If you intend to write a custom parser for this format, please validate it against the sample files in `tests/samples`. (TODO: Create those.)
 -->
 
