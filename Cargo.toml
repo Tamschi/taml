@@ -6,7 +6,6 @@ edition = "2018"
 description = "A kind-to-humans configuration language"
 license = "MPL-2.0"
 repository = "https://github.com/Tamschi/taml"
-publish = false
 readme = "README.md"
 include = [
 	"**/*.rs",
