@@ -23,6 +23,7 @@ jobs:
         - rustup component add clippy
         - RUSTFLAGS='-D warnings' cargo build --all-targets
   allow_failures:
+    - rust: beta #TODO: There's a hickup with try_match here, currently. See if that gets fixed or if I have to fix it here.
     - rust: nightly
   fast_finish: true
 cache: cargo
