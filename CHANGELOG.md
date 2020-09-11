@@ -1,6 +1,6 @@
 # taml Changelog
 
-## next
+## 0.0.2
 
 * Added meta data
 * Started on documentation
