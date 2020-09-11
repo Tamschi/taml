@@ -1,1 +1,2 @@
 - Add sort-fields switch to the CLI. This should not sort across empty lines or lines with only a comment.
+- Use doc-comment or a similar approach to test TAML examples in README.md.

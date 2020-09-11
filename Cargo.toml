@@ -1,24 +1,45 @@
 [package]
 name = "taml"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Tamme Schichler <tamme@schichler.dev>"]
 edition = "2018"
-description = "A kind-to-humans configuration language"
-license = "MPL-2.0"
+description = "A kind-to-humans configuration language."
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/Tamschi/taml"
+homepage = "https://github.com/Tamschi/taml/tree/v0.0.2"
+documentation = "https://docs.rs/taml/0.0.2"
+keywords = ["structured", "humane", "configuration", "parser"]
+categories = ["parser-implementations"]
 readme = "README.md"
 include = [
 	"**/*.rs",
+	"!tests/meta_*.rs", # Tests of meta data files not included in the package.
 	"Cargo.toml",
+	"CHANGELOG.md",
+	"CODE_OF_CONDUCT.md",
+	"LICENSE-*",
+	"README.md",
 ]
 
+[badges]
+travis-ci = { repository = "Tamschi/taml", branch = "unstable" }
+is-it-maintained-issue-resolution = { repository = "Tamschi/taml" }
+is-it-maintained-open-issues = { repository = "Tamschi/taml" }
+maintenance = { status = "experimental" }
+
 [dependencies]
-cervine = "0.0.2"
-debugless-unwrap = "0.0.1"
+cervine = "0.0.5" # public
+debugless-unwrap = "0.0.3"
 enum_properties = "0.2.1"
-gnaw = "0.0.1"
-indexmap = "1.5.0"
-lazy-transform-str = "0.0.1"
+gnaw = "0.0.2"
+indexmap = "1.5.0" # public #TODO: Preserving the order should be an optional feature.
+lazy-transform-str = "0.0.5"
 logos = "0.11.4"
-smartstring = "0.2.3"
+smartstring = "0.2.3" # public
 try_match = "0.2.2"
+
+[dev-dependencies]
+cargo-husky = "1.5.0"
+doc-comment = "0.3.3"
+git_info = "0.1.2"
+version-sync = "0.9.1"
