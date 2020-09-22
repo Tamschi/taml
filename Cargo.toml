@@ -29,7 +29,7 @@ is-it-maintained-open-issues = { repository = "Tamschi/taml" }
 maintenance = { status = "experimental" }
 
 [dependencies]
-cervine = "0.0.5" # public
+cervine = "0.0.6" # public
 debugless-unwrap = "0.0.3"
 enum_properties = "0.2.1"
 gnaw = "0.0.2"
