@@ -2,6 +2,7 @@
 
 ## next
 
+* Ignore meta data tests when running with Miri
 * Public dependency upgrades:
   * `cervine`: 0.0.5 to 0.0.6
 
