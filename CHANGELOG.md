@@ -1,6 +1,6 @@
 # taml Changelog
 
-## next
+## 0.0.3
 
 * Ignore meta data tests when running with Miri
 * Expanded contribution guidelines

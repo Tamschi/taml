@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/taml/0.0.2")]
+#![doc(html_root_url = "https://docs.rs/taml/0.0.3")]
 #[warn(clippy::pedantic)]
 #[cfg(doctest)]
 pub mod readme {
