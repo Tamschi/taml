@@ -6,7 +6,7 @@
 
 ![Rust 1.46.0](https://img.shields.io/static/v1?logo=Rust&label=&message=1.46.0&color=grey)
 [![Build Status](https://travis-ci.com/Tamschi/taml.svg?branch=unstable)](https://travis-ci.com/Tamschi/taml/branches)
-![Crates.io - License](https://img.shields.io/crates/l/taml/0.0.2)
+![Crates.io - License](https://img.shields.io/crates/l/taml/0.0.3)
 
 [![GitHub](https://img.shields.io/static/v1?logo=GitHub&label=&message=%20&color=grey)](https://github.com/Tamschi/taml)
 [![open issues](https://img.shields.io/github/issues-raw/Tamschi/taml)](https://github.com/Tamschi/taml/issues)
@@ -80,10 +80,10 @@ TAML (always UTF-8 where applicable) can represent much of the [Serde data model
 - **option**s are flattened.
   - This means only the [`Some(_)`](https://doc.rust-lang.org/stable/std/option/enum.Option.html#variant.Some)-variant can be present in **seq**s.
   - Use `#[serde(default)]` to parse missing **struct** keys as [`None`](https://doc.rust-lang.org/stable/std/option/enum.Option.html#variant.None).
-- [`unit`](https://doc.rust-lang.org/stable/std/primitive.unit.html) and **unit_struct**s are written as **empty seq**.
-- a **unit_variant** is written as the variant key: `Yes`
-- **newtype_struct**s are flattened,
-- **vewtype_variant**s are written as key followed by a **seq**: `No("impossible!")`
+- [`unit`](https://doc.rust-lang.org/stable/std/primitive.unit.html) and **unit struct**s are written as **empty seq**.
+- a **unit variant** is written as the variant key: `Yes`
+- **newtype struct**s are flattened,
+- **newtype variant**s are written as key followed by a **seq**: `No("impossible!")`
 - **seq**:
   - either inline (*in a single line*) similar to Rust tuples:
 
