@@ -80,10 +80,10 @@ TAML (always UTF-8 where applicable) can represent much of the [Serde data model
 - **option**s are flattened.
   - This means only the [`Some(_)`](https://doc.rust-lang.org/stable/std/option/enum.Option.html#variant.Some)-variant can be present in **seq**s.
   - Use `#[serde(default)]` to parse missing **struct** keys as [`None`](https://doc.rust-lang.org/stable/std/option/enum.Option.html#variant.None).
-- [`unit`](https://doc.rust-lang.org/stable/std/primitive.unit.html) and **unit_struct**s are written as **empty seq**.
-- a **unit_variant** is written as the variant key: `Yes`
-- **newtype_struct**s are flattened,
-- **vewtype_variant**s are written as key followed by a **seq**: `No("impossible!")`
+- [`unit`](https://doc.rust-lang.org/stable/std/primitive.unit.html) and **unit struct**s are written as **empty seq**.
+- a **unit variant** is written as the variant key: `Yes`
+- **newtype struct**s are flattened,
+- **newtype variant**s are written as key followed by a **seq**: `No("impossible!")`
 - **seq**:
   - either inline (*in a single line*) similar to Rust tuples:
 
