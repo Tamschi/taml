@@ -1,3 +1,12 @@
+[submodule "cervine"]
+	path = cervine
+	url = https://github.com/Tamschi/cervine.git
+[submodule "combi"]
+	path = combi
+	url = https://github.com/Tamschi/combi.git
+[submodule "debugless-unwrap"]
+	path = debugless-unwrap
+	url = https://github.com/Tamschi/debugless-unwrap.git
 [submodule "gnaw"]
 	path = gnaw
 	url = https://github.com/Tamschi/gnaw.git
@@ -10,15 +19,6 @@
 [submodule "reserde"]
 	path = reserde
 	url = https://github.com/Tamschi/reserde.git
-[submodule "switcheroo"]
-	path = switcheroo
-	url = https://github.com/Tamschi/switcheroo.git
-[submodule "taml"]
-	path = taml
-	url = https://github.com/Tamschi/taml.git
-[submodule "woc"]
-	path = woc
-	url = https://github.com/Tamschi/woc.git
 [submodule "serde-detach"]
 	path = serde-detach
 	url = https://github.com/Tamschi/serdedetach.git
@@ -28,9 +28,12 @@
 [submodule "serde-object-assistant-extra"]
 	path = serde-object-assistant-extra
 	url = https://github.com/Tamschi/serde-object-assistant-extra.git
-[submodule "opaque-unwrap"]
-	path = opaque-unwrap
-	url = https://github.com/Tamschi/opaque-unwrap.git
-[submodule "combi"]
-	path = combi
-	url = https://github.com/Tamschi/combi.git
+[submodule "switcheroo"]
+	path = switcheroo
+	url = https://github.com/Tamschi/switcheroo.git
+[submodule "taml"]
+	path = taml
+	url = https://github.com/Tamschi/taml.git
+[submodule "taml-cli"]
+	path = taml-cli
+	url = https://github.com/Tamschi/taml-cli.git
