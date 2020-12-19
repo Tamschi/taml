@@ -158,17 +158,20 @@ checksum = "a59fcc234b0a628ae47ebe2b298e347a7995fe4f0fcfe5e50ace780bffc062b7"
 
 [[package]]
 name = "debugless-unwrap"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "assert-panic",
+ "cargo-husky",
  "doc-comment",
+ "git_info",
+ "version-sync",
 ]
 
 [[package]]
 name = "debugless-unwrap"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3ee47a91953412c437cf7c674e92ba5ce71ae2fd81c16d1a796cb584c763ba5"
+checksum = "f400d0750c0c069e8493f2256cb4da6f604b6d2eeb69a0ca8863acde352f8400"
 
 [[package]]
 name = "doc-comment"
@@ -905,7 +908,7 @@ version = "0.0.3"
 dependencies = [
  "cargo-husky",
  "cervine 0.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "debugless-unwrap 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "debugless-unwrap 0.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "doc-comment",
  "enum_properties",
  "git_info",
