@@ -1117,7 +1117,13 @@ fn parse_key_value_pair<'a, Position: Clone>(
 					..
 				})
 			) {
-				assert!(matches!(iter.next().unwrap(), Token{token:lexerToken::Colon,..}))
+				assert!(matches!(
+					iter.next().unwrap(),
+					Token {
+						token: lexerToken::Colon,
+						..
+					}
+				))
 			} else {
 				reporter.report_with(|| Diagnostic {
 					r#type: DiagnosticType::ExpectedKeyValuePair,
@@ -1199,8 +1205,10 @@ fn parse_value<'a, Position: Clone>(
 			(lexerToken::Paren, paren_span) => {
 				let mut items = vec![];
 				while iter.peek().map(|t| &t.token) != Some(&lexerToken::Thesis) {
-					if matches!(iter.peek().map(|t| &t.token), None| Some(&lexerToken::Comment(_))| Some(&lexerToken::Newline))
-					{
+					if matches!(
+						iter.peek().map(|t| &t.token),
+						None | Some(&lexerToken::Comment(_)) | Some(&lexerToken::Newline)
+					) {
 						// Defer to unclosed list error.
 						break;
 					}
