@@ -1,5 +1,7 @@
 # taml Changelog
 
+<!-- markdownlint-disable no-trailing-punctuation -->
+
 ## 0.0.3
 
 * Ignore meta data tests when running with Miri
