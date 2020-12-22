@@ -11,10 +11,9 @@ use std::{
 };
 
 fn escape_identifier(string: &str) -> Cow<String, str> {
-	let mut quote = if let Some(first) = string.chars().next() {
-		first == '-' || first.is_ascii_digit()
-	} else {
-		true
+	let mut quote = match string.chars().next() {
+		Some(first) => first == '-' || first.is_ascii_digit(),
+		None => true,
 	};
 	let escaped_name = string.transform(|rest| match rest.unshift().unwrap() {
 		c @ '\\' | c @ '`' => {

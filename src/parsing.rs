@@ -188,11 +188,14 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
 		values: &mut impl Iterator<Item = Taml<'a, Position>>,
 		reporter: &mut impl Reporter<Position>,
 	) -> Result<(), ()> {
+		#![allow(clippy::items_after_statements)]
+		#![allow(clippy::option_if_let_else)]
+
 		if self.base.is_empty() && self.multi.is_none() {
 			//TODO: Make sure these aren't accepted by the parser.
 			unreachable!("Completely empty tabular path segments are invalid.")
 		} else if self.base.is_empty() {
-			for child in self.multi.as_ref().unwrap().0.iter() {
+			for child in &self.multi.as_ref().unwrap().0 {
 				child.assign(selection, values, reporter)?
 			}
 
@@ -247,13 +250,15 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
 				};
 				selection.unwrap_variant_structured_mut()
 			} else {
-				*selection = Taml {
-					span: multi.1.clone(),
-					value: TamlValue::Map(IndexMap::new()),
-				};
-				selection.unwrap_map_mut()
+				{
+					*selection = Taml {
+						span: multi.1.clone(),
+						value: TamlValue::Map(IndexMap::new()),
+					};
+					selection.unwrap_map_mut()
+				}
 			};
-			for child in multi.0.iter() {
+			for child in &multi.0 {
 				child.assign(selection, values.by_ref(), reporter)?
 			}
 			Ok(())
@@ -280,11 +285,21 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
 	}
 }
 
+/// Parses TAML tokens into a map representing the contained structure.
+///
+/// Any errors and warnings are reported via `reporter`.
+///
+/// # Errors
+///
+/// Iff the given input from `iter` is invalid.
 pub fn parse<'a, Position: Clone>(
 	iter: impl IntoIterator<Item = impl IntoToken<'a, Position>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<Map<'a, Position>, ()> {
-	let mut iter = iter.into_iter().map(|t| t.into_token()).peekable();
+	#![allow(clippy::items_after_statements)]
+	#![allow(clippy::too_many_lines)]
+
+	let mut iter = iter.into_iter().map(IntoToken::into_token).peekable();
 
 	let mut taml = Map::new();
 
@@ -301,9 +316,8 @@ pub fn parse<'a, Position: Clone>(
 	impl ParserState {
 		fn can_comment(&self) -> bool {
 			match self {
-				ParserState::LineStart => true,
 				ParserState::Comment => false,
-				ParserState::Other => true,
+				ParserState::LineStart | ParserState::Other => true,
 			}
 		}
 
@@ -322,6 +336,7 @@ pub fn parse<'a, Position: Clone>(
 			lexerToken::Error => {
 				// Stop parsing but collect all the tokenizer reporter.
 				reporter.report_many_with(|| {
+					#[allow(clippy::filter_map)]
 					iter.filter_map(|t| {
 						if let Token {
 							token: lexerToken::Error,
@@ -523,6 +538,8 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<PathSegment<'a, Position>, ()> {
+	#![allow(clippy::too_many_lines)]
+
 	let mut base = vec![];
 	let mut tabular = None;
 
@@ -592,31 +609,30 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
 							} = iter.next().unwrap()
 						)
 						.debugless_unwrap();
-						let ket_end = match iter.peek().map(|t| &t.token) {
-							Some(lexerToken::Ket) => try_match!(
+						let ket_end = if let Some(lexerToken::Ket) = iter.peek().map(|t| &t.token) {
+							try_match!(
 								Token { token: lexerToken::Ket, span }
 								= iter.next().unwrap()
 								=> span.end
 							)
-							.debugless_unwrap(),
-							_ => {
-								reporter.report_with(|| Diagnostic {
-									r#type: DiagnosticType::UnclosedListKey,
-									labels: vec![
-										DiagnosticLabel::new(
-											"The list key is opened here...",
-											brac_span,
-											DiagnosticLabelPriority::Auxiliary,
-										),
-										DiagnosticLabel::new(
-											"...but not closed at this point.\nExpected ].",
-											iter.next().map(|t| t.span.start.clone()..t.span.start),
-											DiagnosticLabelPriority::Primary,
-										),
-									],
-								});
-								return Err(());
-							}
+							.debugless_unwrap()
+						} else {
+							reporter.report_with(|| Diagnostic {
+								r#type: DiagnosticType::UnclosedListKey,
+								labels: vec![
+									DiagnosticLabel::new(
+										"The list key is opened here...",
+										brac_span,
+										DiagnosticLabelPriority::Auxiliary,
+									),
+									DiagnosticLabel::new(
+										"...but not closed at this point.\nExpected ].",
+										iter.next().map(|t| t.span.start.clone()..t.span.start),
+										DiagnosticLabelPriority::Primary,
+									),
+								],
+							});
+							return Err(());
 						};
 						base.push(BasicPathElement {
 							key: BasicPathElementKey::List {
@@ -660,28 +676,25 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
 					}
 					Some(lexerToken::Brac) => {
 						tabular = Some(parse_tabular_path_segment(iter, reporter)?);
-						match iter.peek().map(|t| &t.token) {
-							Some(lexerToken::Ket) => {
-								assert_eq!(iter.next().unwrap().token, lexerToken::Ket)
-							}
-							_ => {
-								reporter.report_with(|| Diagnostic {
-									r#type: DiagnosticType::UnclosedTabularPathSection,
-									labels: vec![
-										DiagnosticLabel::new(
-											"The tabular section is opened here...",
-											brac_span,
-											DiagnosticLabelPriority::Auxiliary,
-										),
-										DiagnosticLabel::new(
-											"...but not closed at this point.\nExpected ].",
-											iter.next().map(|t| t.span.start.clone()..t.span.start),
-											DiagnosticLabelPriority::Primary,
-										),
-									],
-								});
-								return Err(());
-							}
+						if let Some(lexerToken::Ket) = iter.peek().map(|t| &t.token) {
+							assert_eq!(iter.next().unwrap().token, lexerToken::Ket)
+						} else {
+							reporter.report_with(|| Diagnostic {
+								r#type: DiagnosticType::UnclosedTabularPathSection,
+								labels: vec![
+									DiagnosticLabel::new(
+										"The tabular section is opened here...",
+										brac_span,
+										DiagnosticLabelPriority::Auxiliary,
+									),
+									DiagnosticLabel::new(
+										"...but not closed at this point.\nExpected ].",
+										iter.next().map(|t| t.span.start.clone()..t.span.start),
+										DiagnosticLabelPriority::Primary,
+									),
+								],
+							});
+							return Err(());
 						}
 					}
 					_ => {
@@ -756,6 +769,8 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<TabularPathSegment<'a, Position>, ()> {
+	#![allow(clippy::too_many_lines)]
+
 	let mut base = vec![];
 	loop {
 		match iter.peek().map(|t| &t.token) {
@@ -766,33 +781,30 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
 				} = iter.next().unwrap();
 				assert_eq!(bra, lexerToken::Bra);
 				let multi = parse_tabular_path_segments(iter, reporter)?;
-				match iter.peek().map(|t| &t.token) {
-					Some(lexerToken::Ce) => {
-						let ce = iter.next().unwrap();
-						assert_eq!(ce.token, lexerToken::Ce);
-						return Ok(TabularPathSegment {
-							base,
-							multi: Some((multi, bra_span.start..ce.span.end)),
-						});
-					}
-					_ => {
-						reporter.report_with(|| Diagnostic {
-							r#type: DiagnosticType::UnclosedTabularPathMultiSegment,
-							labels: vec![
-								DiagnosticLabel::new(
-									"This multi segment starts here...",
-									bra_span,
-									DiagnosticLabelPriority::Auxiliary,
-								),
-								DiagnosticLabel::new(
-									"...but is not closed at this point.",
-									iter.next().map(|t| t.span.start.clone()..t.span.start),
-									DiagnosticLabelPriority::Primary,
-								),
-							],
-						});
-						return Err(());
-					}
+				if let Some(lexerToken::Ce) = iter.peek().map(|t| &t.token) {
+					let ce = iter.next().unwrap();
+					assert_eq!(ce.token, lexerToken::Ce);
+					return Ok(TabularPathSegment {
+						base,
+						multi: Some((multi, bra_span.start..ce.span.end)),
+					});
+				} else {
+					reporter.report_with(|| Diagnostic {
+						r#type: DiagnosticType::UnclosedTabularPathMultiSegment,
+						labels: vec![
+							DiagnosticLabel::new(
+								"This multi segment starts here...",
+								bra_span,
+								DiagnosticLabelPriority::Auxiliary,
+							),
+							DiagnosticLabel::new(
+								"...but is not closed at this point.",
+								iter.next().map(|t| t.span.start.clone()..t.span.start),
+								DiagnosticLabelPriority::Primary,
+							),
+						],
+					});
+					return Err(());
 				}
 			}
 
@@ -851,66 +863,20 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
 					=> span.start
 				)
 				.debugless_unwrap();
-				match iter.peek().map(|t| &t.token) {
-					Some(lexerToken::Identifier(_)) => {
-						let (str, str_span) = try_match!(
-							Token {
-								span: _1,
-								token: lexerToken::Identifier(_0),
-							} = iter.next().unwrap()
-						)
-						.debugless_unwrap();
+				if let Some(lexerToken::Identifier(_)) = iter.peek().map(|t| &t.token) {
+					let (str, str_span) = try_match!(
+						Token {
+							span: _1,
+							token: lexerToken::Identifier(_0),
+						} = iter.next().unwrap()
+					)
+					.debugless_unwrap();
 
-						let ket_end = match iter.peek().map(|t| &t.token) {
-							Some(lexerToken::Ket) => {
-								let ket = iter.next().unwrap();
-								assert_eq!(ket.token, lexerToken::Ket);
-								ket.span.end
-							}
-							_ => {
-								reporter.report_with(|| Diagnostic {
-									r#type: DiagnosticType::ExpectedListIdentifier,
-									labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
-										None,
-										iter.next().map(|t| t.span),
-										DiagnosticLabelPriority::Primary,
-									)],
-								});
-								return Err(());
-							}
-						};
-						base.push(BasicPathElement {
-                                key: BasicPathElementKey::List{key: Key{name: str, span: str_span} , span: brac_start..ket_end},
-                                variant: if iter.peek().map(|t| &t.token)
-                                    == Some(&lexerToken::Colon)
-                                {
-                                    assert_eq!(iter.next().unwrap().token, lexerToken::Colon);
-                                    if matches!(
-                                        iter.peek().map(|t| &t.token),
-                                        Some(lexerToken::Identifier(_))
-                                    ) {
-                                        try_match!(
-                                            Token{span, token:lexerToken::Identifier(str)}
-                                            = iter.next().unwrap()
-                                            => Some(Key{name: str, span})
-                                        ).debugless_unwrap()
-                                    } else {
-                                        reporter.report_with(||Diagnostic {
-                                            r#type: DiagnosticType::MissingVariantIdentifier,
-                                            labels: vec![DiagnosticLabel::new(
-                                                "Colons in paths must be followed by a variant identifier.",
-                                                iter.next().map(|t| t.span),
-                                                DiagnosticLabelPriority::Primary,
-                                            )],
-                                        });
-                                        return Err(());
-                                    }
-                                } else {
-                                    None
-                                },
-                            })
-					}
-					_ => {
+					let ket_end = if let Some(lexerToken::Ket) = iter.peek().map(|t| &t.token) {
+						let ket = iter.next().unwrap();
+						assert_eq!(ket.token, lexerToken::Ket);
+						ket.span.end
+					} else {
 						reporter.report_with(|| Diagnostic {
 							r#type: DiagnosticType::ExpectedListIdentifier,
 							labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
@@ -920,7 +886,52 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
 							)],
 						});
 						return Err(());
-					}
+					};
+					base.push(BasicPathElement {
+						key: BasicPathElementKey::List {
+							key: Key {
+								name: str,
+								span: str_span,
+							},
+							span: brac_start..ket_end,
+						},
+						variant: if iter.peek().map(|t| &t.token) == Some(&lexerToken::Colon) {
+							assert_eq!(iter.next().unwrap().token, lexerToken::Colon);
+							if matches!(
+								iter.peek().map(|t| &t.token),
+								Some(lexerToken::Identifier(_))
+							) {
+								try_match!(
+									Token{span, token:lexerToken::Identifier(str)}
+									= iter.next().unwrap()
+									=> Some(Key{name: str, span})
+								)
+								.debugless_unwrap()
+							} else {
+								reporter.report_with(|| Diagnostic {
+									r#type: DiagnosticType::MissingVariantIdentifier,
+									labels: vec![DiagnosticLabel::new(
+										"Colons in paths must be followed by a variant identifier.",
+										iter.next().map(|t| t.span),
+										DiagnosticLabelPriority::Primary,
+									)],
+								});
+								return Err(());
+							}
+						} else {
+							None
+						},
+					})
+				} else {
+					reporter.report_with(|| Diagnostic {
+						r#type: DiagnosticType::ExpectedListIdentifier,
+						labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
+							None,
+							iter.next().map(|t| t.span),
+							DiagnosticLabelPriority::Primary,
+						)],
+					});
+					return Err(());
 				}
 			}
 			_ => {
@@ -1070,6 +1081,8 @@ fn instantiate<'a, 'b, Position: Clone>(
 						}
 					})
 					.unwrap_list_mut();
+
+				#[allow(clippy::option_if_let_else)]
 				if let Some(variant) = path_element.variant {
 					list.push(Taml {
 						span: variant.span.clone(),
@@ -1096,8 +1109,8 @@ fn parse_key_value_pair<'a, Position: Clone>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<(Key<'a, Position>, Taml<'a, Position>), ()> {
-	Ok(match iter.peek().map(|t| &t.token) {
-		Some(lexerToken::Identifier(_)) => {
+	Ok(
+		if let Some(lexerToken::Identifier(_)) = iter.peek().map(|t| &t.token) {
 			let (key_name, key_span) = try_match!(
 				Token {
 					token: lexerToken::Identifier(_0),
@@ -1136,9 +1149,7 @@ fn parse_key_value_pair<'a, Position: Clone>(
 				return Err(());
 			}
 			(key, parse_value(iter, reporter)?)
-		}
-
-		_ => {
+		} else {
 			reporter.report_with(||Diagnostic {
                 r#type: DiagnosticType::ExpectedKeyValuePair,
                 labels: vec![DiagnosticLabel ::new(
@@ -1148,8 +1159,8 @@ fn parse_key_value_pair<'a, Position: Clone>(
                 )],
             });
 			return Err(());
-		}
-	})
+		},
+	)
 }
 
 fn parse_values_line<'a, Position: Clone>(
@@ -1185,6 +1196,8 @@ fn parse_value<'a, Position: Clone>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<Taml<'a, Position>, ()> {
+	#![allow(clippy::too_many_lines)]
+
 	fn err<'a, Position>(
 		span: impl Into<Option<Range<Position>>>,
 		reporter: &mut impl Reporter<Position>,
