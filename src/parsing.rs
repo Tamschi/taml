@@ -781,13 +781,13 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
 				} = iter.next().unwrap();
 				assert_eq!(bra, lexerToken::Bra);
 				let multi = parse_tabular_path_segments(iter, reporter)?;
-				if let Some(lexerToken::Ce) = iter.peek().map(|t| &t.token) {
+				return if let Some(lexerToken::Ce) = iter.peek().map(|t| &t.token) {
 					let ce = iter.next().unwrap();
 					assert_eq!(ce.token, lexerToken::Ce);
-					return Ok(TabularPathSegment {
+					Ok(TabularPathSegment {
 						base,
 						multi: Some((multi, bra_span.start..ce.span.end)),
-					});
+					})
 				} else {
 					reporter.report_with(|| Diagnostic {
 						r#type: DiagnosticType::UnclosedTabularPathMultiSegment,
@@ -804,8 +804,8 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
 							),
 						],
 					});
-					return Err(());
-				}
+					Err(())
+				};
 			}
 
 			//TODO: Deduplicate the code
