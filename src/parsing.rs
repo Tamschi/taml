@@ -1168,8 +1168,7 @@ fn parse_values_line<'a, Position: Clone>(
 	count: usize,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<Vec<Taml<'a, Position>>, ()> {
-	let mut values = vec![];
-	values.push(parse_value(iter, reporter)?);
+	let mut values = vec![parse_value(iter, reporter)?];
 	for _ in 1..count {
 		if iter.peek().map(|t| &t.token) == Some(&lexerToken::Comma) {
 			assert_eq!(iter.next().unwrap().token, lexerToken::Comma);
