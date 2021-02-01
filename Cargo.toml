@@ -34,7 +34,7 @@ enum_properties = "0.2.1"
 gnaw = "0.0.2"
 indexmap = "1.5.0" # public #TODO: Preserving the order should be an optional feature.
 lazy-transform-str = "0.0.6"
-logos = "0.11.4"
+logos = "0.12.0"
 smartstring = "0.2.3" # public
 try_match = "0.2.2"
 
