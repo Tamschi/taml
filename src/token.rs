@@ -16,7 +16,7 @@ fn escape_identifier(string: &str) -> Cow<String, str> {
 		None => true,
 	};
 	let escaped_name = string.transform(|rest| match rest.unshift().unwrap() {
-		c @ '\\' | c @ '`' => {
+		c @ ('\\' | '`') => {
 			quote = true;
 			let mut changed = String::from(r"\");
 			changed.push(c);

@@ -143,9 +143,9 @@ TODO: Describe headings.
 
 `taml` strictly follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) with the following exceptions:
 
-* The minor version will not reset to 0 on major version changes (except for v1).  
+- The minor version will not reset to 0 on major version changes (except for v1).  
 Consider it the global feature level.
-* The patch version will not reset to 0 on major or minor version changes (except for v0.1 and v1).  
+- The patch version will not reset to 0 on major or minor version changes (except for v0.1 and v1).  
 Consider it the global patch level.
 
 This includes the Rust version requirement specified above.  

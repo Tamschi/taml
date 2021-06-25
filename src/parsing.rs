@@ -336,7 +336,6 @@ pub fn parse<'a, Position: Clone>(
 			lexerToken::Error => {
 				// Stop parsing but collect all the tokenizer reporter.
 				reporter.report_many_with(|| {
-					#[allow(clippy::filter_map)]
 					iter.filter_map(|t| {
 						if let Token {
 							token: lexerToken::Error,
@@ -361,7 +360,11 @@ pub fn parse<'a, Position: Clone>(
 			}
 
 			lexerToken::Comment(_) if state.can_comment() => {
-				assert!(matches!(iter.next().unwrap().token, lexerToken::Comment(_)));
+				let comment = iter.next();
+				debug_assert!(matches!(
+					comment.expect("unreachable").token,
+					lexerToken::Comment(_)
+				));
 				ParserState::Comment
 			}
 			lexerToken::Comment(_) => {
@@ -369,7 +372,7 @@ pub fn parse<'a, Position: Clone>(
                     r#type: DiagnosticType::MisplacedComment,
                     labels: vec![DiagnosticLabel::new(
                         "This comment appears after another comment without newline in-between, which shouldn't be possible.",
-                        iter.next().unwrap().span,
+                        iter.next().expect("unreachable").span,
                         DiagnosticLabelPriority::Primary,
                     )]
                 });
@@ -377,7 +380,7 @@ pub fn parse<'a, Position: Clone>(
 			}
 
 			lexerToken::HeadingHashes(_) if state.can_heading() => {
-				let (depth, hashes_span) = match iter.next().unwrap() {
+				let (depth, hashes_span) = match iter.next().expect("unreachable") {
 					Token {
 						token: lexerToken::HeadingHashes(count),
 						span,
@@ -437,7 +440,7 @@ pub fn parse<'a, Position: Clone>(
 					if let BasicPathElement {
 						key: BasicPathElementKey::List { key, span },
 						variant: _,
-					} = tabular.base.first().unwrap()
+					} = tabular.base.first().expect("unreachable")
 					{
 						selection.entry(key.clone()).or_insert_with(|| Taml {
 							span: span.clone(),
@@ -453,7 +456,7 @@ pub fn parse<'a, Position: Clone>(
 				ParserState::Other
 			}
 			lexerToken::HeadingHashes(_) => {
-				let start = iter.next().unwrap().span.start;
+				let start = iter.next().expect("unreachable").span.start;
 				reporter.report_with(|| Diagnostic {
 					r#type: DiagnosticType::MisplacedHeading,
 					labels: vec![DiagnosticLabel::new(
@@ -466,7 +469,8 @@ pub fn parse<'a, Position: Clone>(
 			}
 
 			lexerToken::Newline => {
-				assert_eq!(iter.next().unwrap().token, lexerToken::Newline);
+				let newline = iter.next();
+				debug_assert_eq!(newline.expect("unreachable").token, lexerToken::Newline);
 				ParserState::LineStart
 			}
 
@@ -486,7 +490,7 @@ pub fn parse<'a, Position: Clone>(
 							return Err(());
 						};
 
-						assert!(values.next().is_none());
+						debug_assert!(values.next().is_none());
 					}
 					None => {
 						let (key, value) = match parse_key_value_pair(&mut iter, reporter) {
@@ -513,7 +517,7 @@ pub fn parse<'a, Position: Clone>(
 				ParserState::Other
 			}
 			_ => {
-				let start = iter.next().unwrap().span.start;
+				let start = iter.next().expect("unreachable").span.start;
 				reporter.report_with(|| Diagnostic {
 					r#type: DiagnosticType::MisplacedData,
 					labels: vec![DiagnosticLabel::new(
@@ -727,7 +731,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
 			break;
 		}
 		match iter.peek().map(|t| &t.token) {
-			Some(lexerToken::Newline) | Some(lexerToken::Comment(_)) => break,
+			Some(lexerToken::Newline | lexerToken::Comment(_)) => break,
 			Some(lexerToken::Period) => assert_eq!(iter.next().unwrap().token, lexerToken::Period),
 			_ => {
 				reporter.report_with(|| Diagnostic {
@@ -753,7 +757,7 @@ fn parse_tabular_path_segments<'a, Position: Clone>(
 	let mut segments = vec![];
 	while !matches!(
 		iter.peek().map(|t| &t.token),
-		None | Some(lexerToken::Ce) | Some(lexerToken::Ket)
+		None | Some(lexerToken::Ce | lexerToken::Ket)
 	) {
 		segments.push(parse_tabular_path_segment(iter, reporter)?);
 
@@ -1219,7 +1223,7 @@ fn parse_value<'a, Position: Clone>(
 				while iter.peek().map(|t| &t.token) != Some(&lexerToken::Thesis) {
 					if matches!(
 						iter.peek().map(|t| &t.token),
-						None | Some(&lexerToken::Comment(_)) | Some(&lexerToken::Newline)
+						None | Some(&(lexerToken::Comment(_) | lexerToken::Newline))
 					) {
 						// Defer to unclosed list error.
 						break;
