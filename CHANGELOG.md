@@ -2,6 +2,11 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
+## next
+
+* Increased minimum Rust version from 1.46 to 1.53
+  > to use nested or-patterns, which simplifies the parser code somewhat.
+
 ## 0.0.3
 
 * Ignore meta data tests when running with Miri

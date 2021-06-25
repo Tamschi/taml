@@ -4,7 +4,7 @@
 [![Crates.io](https://img.shields.io/crates/v/taml)](https://crates.io/crates/taml)
 [![Docs.rs](https://docs.rs/taml/badge.svg)](https://docs.rs/taml)
 
-![Rust 1.46](https://img.shields.io/static/v1?logo=Rust&label=&message=1.46&color=grey)
+![Rust 1.53](https://img.shields.io/static/v1?logo=Rust&label=&message=1.53&color=grey)
 [![CI](https://github.com/Tamschi/taml/workflows/CI/badge.svg?branch=develop)](https://github.com/Tamschi/taml/actions?query=workflow%3ACI+branch%3Adevelop)
 ![Crates.io - License](https://img.shields.io/crates/l/taml/0.0.3)
 
