@@ -4,8 +4,9 @@
 
 ## next
 
-* Increased minimum Rust version from 1.46 to 1.53
-  > to use nested or-patterns, which simplifies the parser code somewhat.
+* **Breaking:**
+  * Increased minimum Rust version from 1.46 to 1.53
+    > to use nested or-patterns, which simplifies the parser code somewhat.
 
 ## 0.0.3
 
