@@ -1,5 +1,7 @@
 use enum_properties::enum_properties;
-use std::{borrow::Cow, fmt::Display, iter, ops::Range, string::String as stdString};
+use std::{
+	borrow::Cow, convert::Into, fmt::Display, iter, ops::Range, string::String as stdString,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub enum DiagnosticLevel {
@@ -258,7 +260,7 @@ impl<Position> DiagnosticLabel<Position> {
 		priority: DiagnosticLabelPriority,
 	) -> Self {
 		Self {
-			caption: caption.into().map(|c| c.into()),
+			caption: caption.into().map(Into::into),
 			span: span.into(),
 			priority,
 		}

@@ -2,11 +2,11 @@
 
 [![Lib.rs](https://img.shields.io/badge/Lib.rs-*-84f)](https://lib.rs/crates/taml)
 [![Crates.io](https://img.shields.io/crates/v/taml)](https://crates.io/crates/taml)
-[![Docs.rs](https://docs.rs/taml/badge.svg)](https://docs.rs/crates/taml)
+[![Docs.rs](https://docs.rs/taml/badge.svg)](https://docs.rs/taml)
 
-![Rust 1.46.0](https://img.shields.io/static/v1?logo=Rust&label=&message=1.46.0&color=grey)
-[![Build Status](https://travis-ci.com/Tamschi/taml.svg?branch=unstable)](https://travis-ci.com/Tamschi/taml/branches)
-![Crates.io - License](https://img.shields.io/crates/l/taml/0.0.3)
+![Rust 1.53](https://img.shields.io/static/v1?logo=Rust&label=&message=1.53&color=grey)
+[![CI](https://github.com/Tamschi/taml/workflows/CI/badge.svg?branch=unstable)](https://github.com/Tamschi/taml/actions?query=workflow%3ACI+branch%3Aunstable)
+![Crates.io - License](https://img.shields.io/crates/l/taml/0.0.4)
 
 [![GitHub](https://img.shields.io/static/v1?logo=GitHub&label=&message=%20&color=grey)](https://github.com/Tamschi/taml)
 [![open issues](https://img.shields.io/github/issues-raw/Tamschi/taml)](https://github.com/Tamschi/taml/issues)
@@ -48,9 +48,9 @@ TODO: Add a good example file here.
 
 Licensed under either of
 
-* Apache License, Version 2.0
+- Apache License, Version 2.0
    ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
-* MIT license
+- MIT license
    ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
 at your option.
@@ -143,9 +143,9 @@ TODO: Describe headings.
 
 `taml` strictly follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) with the following exceptions:
 
-* The minor version will not reset to 0 on major version changes (except for v1).  
+- The minor version will not reset to 0 on major version changes (except for v1).  
 Consider it the global feature level.
-* The patch version will not reset to 0 on major or minor version changes (except for v0.1 and v1).  
+- The patch version will not reset to 0 on major or minor version changes (except for v0.1 and v1).  
 Consider it the global patch level.
 
 This includes the Rust version requirement specified above.  

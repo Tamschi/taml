@@ -1,5 +1,8 @@
-#![doc(html_root_url = "https://docs.rs/taml/0.0.3")]
-#[warn(clippy::pedantic)]
+#![doc(html_root_url = "https://docs.rs/taml/0.0.4")]
+#![warn(clippy::pedantic)]
+#![allow(clippy::result_unit_err)]
+#![allow(clippy::trivially_copy_pass_by_ref)]
+
 #[cfg(doctest)]
 pub mod readme {
 	doc_comment::doctest!("../README.md");

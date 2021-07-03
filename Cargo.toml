@@ -1,45 +1,51 @@
 [package]
 name = "taml"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["Tamme Schichler <tamme@schichler.dev>"]
 edition = "2018"
 description = "A kind-to-humans configuration language."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Tamschi/taml"
-homepage = "https://github.com/Tamschi/taml/tree/v0.0.3"
-documentation = "https://docs.rs/taml/0.0.3"
+homepage = "https://github.com/Tamschi/taml/tree/v0.0.4"
+documentation = "https://docs.rs/taml/0.0.4"
 keywords = ["structured", "humane", "configuration", "parser"]
 categories = ["parser-implementations"]
 readme = "README.md"
 include = [
 	"**/*.rs",
-	"!tests/meta_*.rs", # Tests of meta data files not included in the package.
+	"!tests/unincluded_*.rs", # Tests of meta data files not included in the package.
 	"Cargo.toml",
 	"CHANGELOG.md",
 	"CODE_OF_CONDUCT.md",
 	"LICENSE-*",
 	"README.md",
+	"SECURITY.md",
 ]
+# resolver = "2"
 
 [badges]
-travis-ci = { repository = "Tamschi/taml", branch = "unstable" }
 is-it-maintained-issue-resolution = { repository = "Tamschi/taml" }
 is-it-maintained-open-issues = { repository = "Tamschi/taml" }
 maintenance = { status = "experimental" }
 
 [dependencies]
 cervine = "0.0.6" # public
-debugless-unwrap = "0.0.3"
-enum_properties = "0.2.1"
+debugless-unwrap = "0.0.4"
+enum_properties = "^0.3.0"
 gnaw = "0.0.2"
-indexmap = "1.5.0" # public #TODO: Preserving the order should be an optional feature.
+indexmap = "^1.6.2" # public #TODO: Preserving the order should be an optional feature.
 lazy-transform-str = "0.0.6"
-logos = "0.11.4"
-smartstring = "0.2.3" # public
+logos = "0.12.0" # public (through trait implementation on Token. Is there a way to not publish this?)
+smartstring = "0.2.7" # public
 try_match = "0.2.2"
+
+# Minimum version working with try_match starting with Rust 1.47.0.
+# SEE: https://github.com/rust-lang/rust/issues/77789, https://github.com/dtolnay/syn/issues/906, https://github.com/dtolnay/syn/releases/tag/1.0.44
+syn = { version = "1.0.44", default-features = false }
 
 [dev-dependencies]
 cargo-husky = "1.5.0"
 doc-comment = "0.3.3"
 git_info = "0.1.2"
 version-sync = "0.9.1"
+wasm-bindgen-test = "0.3.24"

@@ -45,6 +45,9 @@ impl Default for CanonicalFormatScanner {
 }
 
 impl CanonicalFormatScanner {
+	/// # Panics
+	///
+	/// This function panics in some cases where the input could not have been created by correctly parsing a text file.
 	pub fn next(&mut self, token: &Token) -> Recommendation {
 		#[allow(clippy::match_same_arms)]
 		let recommendation = match (&self.state, token) {
@@ -66,12 +69,13 @@ impl CanonicalFormatScanner {
 
 			(State::Identifier, Token::Identifier(_)) => Recommendation::PrependSpaceRequired,
 
-			(State::Number, Token::Float(_)) | (State::Number, Token::Integer(_)) => {
+			(State::Number, Token::Float(_) | Token::Integer(_)) => {
 				Recommendation::PrependSpaceRequired
 			}
 
-			(State::SingleNewline, Token::Comment(_))
-			| (State::MultiNewlineOrInitial, Token::Comment(_)) => Recommendation::Required,
+			(State::SingleNewline | State::MultiNewlineOrInitial, Token::Comment(_)) => {
+				Recommendation::Required
+			}
 			(_, Token::Comment(_)) => Recommendation::PrependSpace,
 
 			(State::ColonOrComma, _) => Recommendation::PrependSpace,
