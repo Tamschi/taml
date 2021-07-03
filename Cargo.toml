@@ -1,13 +1,13 @@
 [package]
 name = "taml"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["Tamme Schichler <tamme@schichler.dev>"]
 edition = "2018"
 description = "A kind-to-humans configuration language."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Tamschi/taml"
-homepage = "https://github.com/Tamschi/taml/tree/v0.0.3"
-documentation = "https://docs.rs/taml/0.0.3"
+homepage = "https://github.com/Tamschi/taml/tree/v0.0.4"
+documentation = "https://docs.rs/taml/0.0.4"
 keywords = ["structured", "humane", "configuration", "parser"]
 categories = ["parser-implementations"]
 readme = "README.md"
@@ -36,7 +36,7 @@ enum_properties = "^0.3.0"
 gnaw = "0.0.2"
 indexmap = "^1.6.2" # public #TODO: Preserving the order should be an optional feature.
 lazy-transform-str = "0.0.6"
-logos = "0.12.0"
+logos = "0.12.0" # public (through trait implementation on Token. Is there a way to not publish this?)
 smartstring = "0.2.7" # public
 try_match = "0.2.2"
 
