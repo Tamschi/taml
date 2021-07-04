@@ -2,6 +2,13 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
+## 0.0.5
+
+2021-07-05
+
+* Features:
+  * Implemented `Borrow<str>` for `Key`.
+
 ## 0.0.4
 
 2021-07-03
