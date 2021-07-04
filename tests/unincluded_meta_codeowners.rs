@@ -6,8 +6,5 @@ use constants::*;
 
 #[test]
 fn user_appears() {
-	version_sync::assert_contains_regex!(
-		".github/dependabot.yml",
-		&format!(r#"- "{user}"$"#, user = USER)
-	);
+	version_sync::assert_contains_regex!("CODEOWNERS", &format!("^* @{user}$", user = USER));
 }
