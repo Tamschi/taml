@@ -1,6 +1,7 @@
 /.git* text eol=lf
 
 *.json text eol=lf
+*.json5 text eol=lf
 *.md text eol=lf
 *.rs text eol=lf
 *.toml text eol=lf
