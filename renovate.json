@@ -1,5 +1,24 @@
 {
 	"extends": [
 		"config:base"
+	],
+	"assigneesFromCodeOwners": true,
+	"reviewersFromCodeOwners": true,
+	"packageRules": [
+		{
+			"matchUpdateTypes": [
+				"minor",
+				"patch",
+				"pin",
+				"digest"
+			],
+			"automerge": true
+		},
+		{
+			"matchDepTypes": [
+				"devDependencies"
+			],
+			"automerge": true
+		}
 	]
 }
