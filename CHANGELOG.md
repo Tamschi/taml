@@ -2,9 +2,9 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
-## next
+## 0.0.5
 
-TODO: Date
+2021-07-05
 
 * Features:
   * Implemented `Borrow<str>` for `Key`.
