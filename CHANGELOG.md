@@ -2,6 +2,13 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
+## next
+
+TODO: Date
+
+* Features:
+  * Implemented `Borrow<str>` for `Key`.
+
 ## 0.0.4
 
 2021-07-03

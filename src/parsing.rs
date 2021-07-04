@@ -7,6 +7,7 @@ use debugless_unwrap::DebuglessUnwrap as _;
 use indexmap::{map, IndexMap};
 use smartstring::alias::String;
 use std::{
+	borrow::Borrow,
 	hash::Hash,
 	iter::Peekable,
 	ops::{Deref, Range},
@@ -140,6 +141,12 @@ struct TabularPathSegment<'a, Position: Clone> {
 pub struct Key<'a, Position> {
 	pub name: Cow<'a, String, str>,
 	pub span: Range<Position>,
+}
+
+impl<'a, Position> Borrow<str> for Key<'a, Position> {
+	fn borrow(&self) -> &str {
+		self.name.as_ref()
+	}
 }
 
 impl<'a, Position> Deref for Key<'a, Position> {
