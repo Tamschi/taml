@@ -77,6 +77,10 @@ impl<'a, Position> Taml<'a, Position> {
 #[derive(Debug, Clone)]
 pub enum TamlValue<'a, Position> {
 	String(Cow<'a, String, str>),
+	Decoded {
+		encoding: Cow<'a, String, str>,
+		decoded: Cow<'a, String, str>,
+	},
 	Integer(&'a str),
 	Float(&'a str),
 	List(List<'a, Position>),
@@ -1273,6 +1277,10 @@ fn parse_value<'a, Position: Clone>(
 
 			(lexerToken::String(str), span) => Taml {
 				value: TamlValue::String(str),
+				span,
+			},
+			(lexerToken::Decoded((encoding, decoded)), span) => Taml {
+				value: TamlValue::Decoded { encoding, decoded },
 				span,
 			},
 			(lexerToken::Float(str), span) => Taml {

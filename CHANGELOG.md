@@ -2,6 +2,15 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
+## 0.0.6
+
+2021-07-12
+
+* **Breaking:**
+  * Added `<encoding:Decoded \>text>` buffer strings to the grammar.
+
+    These are exposed (without processing beyond the initial unescape!) via the `Token::Decoded((…, …))` and `TamlValue::Decoded { … }` variants.
+
 ## 0.0.5
 
 2021-07-05
