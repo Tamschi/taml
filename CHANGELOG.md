@@ -2,9 +2,9 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
-## next
+## 0.0.6
 
-TODO: Date
+2021-07-12
 
 * **Breaking:**
   * Added `<encoding:Decoded \>text>` buffer strings to the grammar.
