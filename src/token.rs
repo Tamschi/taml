@@ -131,18 +131,18 @@ pub enum Token<'a, Position> {
 		let (encoding, decoded) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
 		Decoded {
 			encoding: Cow::Borrowed(encoding),
-			encoding_span: 1..encoding.len() + 1,
+			encoding_span: lex.span().start + 1..lex.span().start + 1 + encoding.len(),
 			decoded: unescape_backslashed_verbatim(decoded),
-			decoded_span: lex.slice().len() - 1 - decoded.len()..lex.slice().len() - 1,
+			decoded_span: lex.span().end - 1 - decoded.len()..lex.span().end - 1,
 		}
 	})]
 	#[regex(r#"<`([^\\`]|\\\\|\\`)*`:([^\\>]|\\\\|\\>)*>"#, |lex| {
 		let (encoding, decoded) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
 		Decoded {
 			encoding: unescape_quoted_identifier(encoding),
-			encoding_span: 1..encoding.len() + 1,
+			encoding_span: lex.span().start + 1..lex.span().start + 1 + encoding.len(),
 			decoded: unescape_backslashed_verbatim(decoded),
-			decoded_span: lex.slice().len() - 1 - decoded.len()..lex.slice().len() - 1,
+			decoded_span: lex.span().end - 1 - decoded.len()..lex.span().end - 1,
 		}
 	})]
 	Decoded(Decoded<'a, Position>),

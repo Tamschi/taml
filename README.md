@@ -6,7 +6,7 @@
 
 ![Rust 1.53](https://img.shields.io/static/v1?logo=Rust&label=&message=1.53&color=grey)
 [![CI](https://github.com/Tamschi/taml/workflows/CI/badge.svg?branch=unstable)](https://github.com/Tamschi/taml/actions?query=workflow%3ACI+branch%3Aunstable)
-![Crates.io - License](https://img.shields.io/crates/l/taml/0.0.7)
+![Crates.io - License](https://img.shields.io/crates/l/taml/0.0.8)
 
 [![GitHub](https://img.shields.io/static/v1?logo=GitHub&label=&message=%20&color=grey)](https://github.com/Tamschi/taml)
 [![open issues](https://img.shields.io/github/issues-raw/Tamschi/taml)](https://github.com/Tamschi/taml/issues)

@@ -2,6 +2,13 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
+## 0.0.8
+
+2021-07-12
+
+* Fixed:
+  * The span info inside `Decoded` was calculated really wrong during lexing.
+
 ## 0.0.7
 
 2021-07-12

@@ -330,7 +330,7 @@ dependencies = [
 
 [[package]]
 name = "taml"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "cargo-husky",
  "cervine",
