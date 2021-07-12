@@ -1,13 +1,13 @@
 [package]
 name = "taml"
-version = "0.0.6"
+version = "0.0.7"
 authors = ["Tamme Schichler <tamme@schichler.dev>"]
 edition = "2018"
 description = "A kind-to-humans configuration language."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Tamschi/taml"
-homepage = "https://github.com/Tamschi/taml/tree/v0.0.6"
-documentation = "https://docs.rs/taml/0.0.6"
+homepage = "https://github.com/Tamschi/taml/tree/v0.0.7"
+documentation = "https://docs.rs/taml/0.0.7"
 keywords = ["structured", "humane", "configuration", "parser"]
 categories = ["parser-implementations"]
 readme = "README.md"

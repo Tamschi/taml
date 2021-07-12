@@ -2,9 +2,9 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
-## next
+## 0.0.7
 
-TODO: Date
+2021-07-12
 
 * **Breaking:**
   * Extended `Token::Decoded` and `TamlValue::Decoded` to carry additional span information.
