@@ -2,6 +2,13 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
+## next
+
+TODO: Date
+
+* Fixed:
+  * The span info inside `Decoded` was calculated really wrong during lexing.
+
 ## 0.0.7
 
 2021-07-12
