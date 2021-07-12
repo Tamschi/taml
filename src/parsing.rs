@@ -1,6 +1,7 @@
 use crate::{
 	diagnostics::{Diagnostic, DiagnosticLabel, DiagnosticLabelPriority, DiagnosticType, Reporter},
 	token::Token as lexerToken,
+	Decoded,
 };
 use cervine::Cow;
 use debugless_unwrap::DebuglessUnwrap as _;
@@ -8,6 +9,7 @@ use indexmap::{map, IndexMap};
 use smartstring::alias::String;
 use std::{
 	borrow::Borrow,
+	fmt::Debug,
 	hash::Hash,
 	iter::Peekable,
 	ops::{Deref, Range},
@@ -20,11 +22,11 @@ pub trait IntoToken<'a, Position> {
 
 #[derive(Debug)]
 pub struct Token<'a, Position> {
-	token: lexerToken<'a>,
+	token: lexerToken<'a, Position>,
 	span: Range<Position>,
 }
 
-impl<'a> IntoToken<'a, ()> for lexerToken<'a> {
+impl<'a> IntoToken<'a, ()> for lexerToken<'a, ()> {
 	fn into_token(self) -> Token<'a, ()> {
 		Token {
 			token: self,
@@ -33,7 +35,7 @@ impl<'a> IntoToken<'a, ()> for lexerToken<'a> {
 	}
 }
 
-impl<'a, Position> IntoToken<'a, Position> for (lexerToken<'a>, Range<Position>) {
+impl<'a, Position> IntoToken<'a, Position> for (lexerToken<'a, Position>, Range<Position>) {
 	fn into_token(self) -> Token<'a, Position> {
 		Token {
 			token: self.0,
@@ -77,10 +79,7 @@ impl<'a, Position> Taml<'a, Position> {
 #[derive(Debug, Clone)]
 pub enum TamlValue<'a, Position> {
 	String(Cow<'a, String, str>),
-	Decoded {
-		encoding: Cow<'a, String, str>,
-		decoded: Cow<'a, String, str>,
-	},
+	Decoded(Decoded<'a, Position>),
 	Integer(&'a str),
 	Float(&'a str),
 	List(List<'a, Position>),
@@ -98,18 +97,18 @@ pub enum VariantPayload<'a, Position> {
 	Unit,
 }
 
-struct PathSegment<'a, Position: Clone> {
+struct PathSegment<'a, Position: Debug + Clone + PartialEq> {
 	base: Vec<BasicPathElement<'a, Position>>,
 	tabular: Option<TabularPathSegment<'a, Position>>,
 }
 
 #[derive(Clone)]
-struct BasicPathElement<'a, Position: Clone> {
+struct BasicPathElement<'a, Position: Debug + Clone + PartialEq> {
 	key: BasicPathElementKey<'a, Position>,
 	variant: Option<Key<'a, Position>>,
 }
 
-impl<'a, Position: Clone> BasicPathElement<'a, Position> {
+impl<'a, Position: Debug + Clone + PartialEq> BasicPathElement<'a, Position> {
 	fn span(&self) -> Range<Position> {
 		self.variant.as_ref().map_or_else(
 			|| self.key.span().clone(),
@@ -136,7 +135,7 @@ impl<'a, Position> BasicPathElementKey<'a, Position> {
 	}
 }
 
-struct TabularPathSegment<'a, Position: Clone> {
+struct TabularPathSegment<'a, Position: Debug + Clone + PartialEq> {
 	base: Vec<BasicPathElement<'a, Position>>,
 	multi: Option<(Vec<TabularPathSegment<'a, Position>>, Range<Position>)>,
 }
@@ -185,7 +184,7 @@ pub type MapIter<'iter, 'taml, Position> =
 pub type List<'a, Position> = Vec<Taml<'a, Position>>;
 pub type ListIter<'iter, 'taml, Position> = std::slice::Iter<'iter, Taml<'taml, Position>>;
 
-impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
+impl<'a, Position: Debug + Clone + PartialEq> TabularPathSegment<'a, Position> {
 	fn arity(&self) -> usize {
 		match &self.multi {
 			None => 1,
@@ -219,7 +218,9 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
 			reporter,
 		)?;
 
-		fn placeholder<'a, Position: Clone>(position: Position) -> Taml<'a, Position> {
+		fn placeholder<'a, Position: Debug + Clone + PartialEq>(
+			position: Position,
+		) -> Taml<'a, Position> {
 			Taml {
 				span: position.clone()..position,
 				value: TamlValue::String(Cow::Borrowed("PLACEHOLDER")),
@@ -303,7 +304,7 @@ impl<'a, Position: Clone> TabularPathSegment<'a, Position> {
 /// # Errors
 ///
 /// Iff the given input from `iter` is invalid.
-pub fn parse<'a, Position: Clone>(
+pub fn parse<'a, Position: Debug + Clone + PartialEq>(
 	iter: impl IntoIterator<Item = impl IntoToken<'a, Position>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<Map<'a, Position>, ()> {
@@ -549,7 +550,7 @@ pub fn parse<'a, Position: Clone>(
 	Ok(taml)
 }
 
-fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
+fn parse_path_segment<'a, 'b, 'c, Position: Debug + Clone + PartialEq>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<PathSegment<'a, Position>, ()> {
@@ -761,7 +762,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Clone>(
 	Ok(PathSegment { base, tabular })
 }
 
-fn parse_tabular_path_segments<'a, Position: Clone>(
+fn parse_tabular_path_segments<'a, Position: Debug + Clone + PartialEq>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<Vec<TabularPathSegment<'a, Position>>, ()> {
@@ -780,7 +781,7 @@ fn parse_tabular_path_segments<'a, Position: Clone>(
 	Ok(segments)
 }
 
-fn parse_tabular_path_segment<'a, Position: Clone>(
+fn parse_tabular_path_segment<'a, Position: Debug + Clone + PartialEq>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<TabularPathSegment<'a, Position>, ()> {
@@ -969,7 +970,7 @@ fn parse_tabular_path_segment<'a, Position: Clone>(
 	}
 }
 
-fn get_last_mut<'a, 'b, 'c, Position: Clone + 'c>(
+fn get_last_mut<'a, 'b, 'c, Position: Debug + Clone + PartialEq + 'c>(
 	mut selected: &'a mut Map<'b, Position>,
 	path: impl IntoIterator<Item = &'c PathSegment<'b, Position>>,
 ) -> &'a mut Map<'b, Position>
@@ -1014,7 +1015,7 @@ where
 	selected
 }
 
-fn instantiate<'a, 'b, Position: Clone>(
+fn instantiate<'a, 'b, Position: Debug + Clone + PartialEq>(
 	mut selection: &'a mut Map<'b, Position>,
 	path: impl IntoIterator<Item = BasicPathElement<'b, Position>>,
 	reporter: &mut impl Reporter<Position>,
@@ -1120,7 +1121,7 @@ fn instantiate<'a, 'b, Position: Clone>(
 	Ok(selection)
 }
 
-fn parse_key_value_pair<'a, Position: Clone>(
+fn parse_key_value_pair<'a, Position: Debug + Clone + PartialEq>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<(Key<'a, Position>, Taml<'a, Position>), ()> {
@@ -1178,7 +1179,7 @@ fn parse_key_value_pair<'a, Position: Clone>(
 	)
 }
 
-fn parse_values_line<'a, Position: Clone>(
+fn parse_values_line<'a, Position: Debug + Clone + PartialEq>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	count: usize,
 	reporter: &mut impl Reporter<Position>,
@@ -1206,7 +1207,7 @@ fn parse_values_line<'a, Position: Clone>(
 	Ok(values)
 }
 
-fn parse_value<'a, Position: Clone>(
+fn parse_value<'a, Position: Debug + Clone + PartialEq>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<Taml<'a, Position>, ()> {
@@ -1279,8 +1280,8 @@ fn parse_value<'a, Position: Clone>(
 				value: TamlValue::String(str),
 				span,
 			},
-			(lexerToken::Decoded((encoding, decoded)), span) => Taml {
-				value: TamlValue::Decoded { encoding, decoded },
+			(lexerToken::Decoded(decoded), span) => Taml {
+				value: TamlValue::Decoded(decoded),
 				span,
 			},
 			(lexerToken::Float(str), span) => Taml {

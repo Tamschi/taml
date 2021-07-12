@@ -2,6 +2,15 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
+## next
+
+TODO: Date
+
+* **Breaking:**
+  * Extended `Token::Decoded` and `TamlValue::Decoded` to carry additional span information.
+
+    > This also makes `Token` generic, but only `Token<usize>` implements `logos::Lexer`.
+
 ## 0.0.6
 
 2021-07-12
