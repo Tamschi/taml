@@ -10,6 +10,18 @@ use std::{
 	iter,
 };
 
+#[must_use = "pure function"]
+pub fn escape_greater(string: &str) -> Cow<String, str> {
+	string.transform(|rest| match rest.unshift().unwrap() {
+		c @ ('\\' | '>') => {
+			let mut changed = String::from(r"\");
+			changed.push(c);
+			TransformedPart::Changed(changed)
+		}
+		_ => TransformedPart::Unchanged,
+	})
+}
+
 fn escape_identifier(string: &str) -> Cow<String, str> {
 	let mut quote = match string.chars().next() {
 		Some(first) => first == '-' || first.is_ascii_digit(),
@@ -113,6 +125,16 @@ pub enum Token<'a> {
 	#[regex(r#""([^\\"]|\\\\|\\")*""#, |lex| unescape_backslashed_verbatim(&lex.slice()[1..lex.slice().len() - 1]))]
 	String(Cow<'a, String, str>),
 
+	#[regex(r#"<[a-zA-Z_][a-zA-Z\-_0-9]*:([^\\>]|\\\\|\\>)*>"#, |lex| {
+		let (encoding, decoded) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
+		(Cow::Borrowed(encoding), unescape_backslashed_verbatim(decoded))
+	})]
+	#[regex(r#"<`([^\\`]|\\\\|\\`)*`:([^\\>]|\\\\|\\>)*>"#, |lex| {
+		let (encoding, decoded) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
+		(unescape_quoted_identifier(encoding), unescape_backslashed_verbatim(decoded))
+	})]
+	Decoded((Cow<'a, String, str>, Cow<'a, String, str>)),
+
 	#[regex(r"-?\d+\.\d+", |lex| trim_trailing_0s(trim_leading_0s(lex.slice())))]
 	Float(&'a str),
 
@@ -147,6 +169,9 @@ impl<'a> Display for Token<'a> {
 			Token::Thesis => write!(f, ")"),
 			Token::Comma => write!(f, ","),
 			Token::Period => write!(f, "."),
+			Token::Decoded((encoding, decoded)) => {
+				write!(f, "<{}:{}>", encoding, escape_greater(decoded))
+			}
 			Token::String(str) => write!(f, r#""{}""#, escape_double_quotes(str)),
 			Token::Float(str) | Token::Integer(str) => write!(f, "{}", str),
 			Token::Colon => write!(f, ":"),

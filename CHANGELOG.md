@@ -2,6 +2,13 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
+## next
+
+TODO: Date
+
+* **Breaking:**
+  * Added `<encoding:Decoded \>text>` buffer strings
+
 ## 0.0.5
 
 2021-07-05
