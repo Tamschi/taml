@@ -7,7 +7,9 @@
 TODO: Date
 
 * **Breaking:**
-  * Added `<encoding:Decoded \>text>` buffer strings
+  * Added `<encoding:Decoded \>text>` buffer strings to the grammar.
+
+    These are exposed (without processing beyond the initial unescape!) via the `Token::Decoded((…, …))` and `TamlValue::Decoded { … }` variants.
 
 ## 0.0.5
 
