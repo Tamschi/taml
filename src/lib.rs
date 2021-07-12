@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/taml/0.0.7")]
+#![doc(html_root_url = "https://docs.rs/taml/0.0.8")]
 #![warn(clippy::pedantic)]
 #![allow(clippy::result_unit_err)]
 #![allow(clippy::trivially_copy_pass_by_ref)]

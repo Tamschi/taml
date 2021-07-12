@@ -2,9 +2,9 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
-## next
+## 0.0.8
 
-TODO: Date
+2021-07-12
 
 * Fixed:
   * The span info inside `Decoded` was calculated really wrong during lexing.
