@@ -1,3 +1,4 @@
+use crate::Decoded;
 use cervine::Cow;
 use gnaw::Unshift as _;
 use lazy_transform_str::{
@@ -90,8 +91,9 @@ fn trim_trailing_0s(mut s: &str) -> &str {
 	s
 }
 
-#[derive(Logos, Debug, Clone, PartialEq)]
-pub enum Token<'a> {
+#[derive(Logos, Debug, Clone, PartialEq, Eq)]
+#[logos(type Position = usize)]
+pub enum Token<'a, Position> {
 	#[regex(r"//[^\r\n]+", |lex| lex.slice()[2..].trim_end_matches([' ', '\t'].as_ref()))]
 	Comment(&'a str),
 
@@ -127,13 +129,23 @@ pub enum Token<'a> {
 
 	#[regex(r#"<[a-zA-Z_][a-zA-Z\-_0-9]*:([^\\>]|\\\\|\\>)*>"#, |lex| {
 		let (encoding, decoded) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
-		(Cow::Borrowed(encoding), unescape_backslashed_verbatim(decoded))
+		Decoded {
+			encoding: Cow::Borrowed(encoding),
+			encoding_span: 1..encoding.len() + 1,
+			decoded: unescape_backslashed_verbatim(decoded),
+			decoded_span: lex.slice().len() - 1 - decoded.len()..lex.slice().len() - 1,
+		}
 	})]
 	#[regex(r#"<`([^\\`]|\\\\|\\`)*`:([^\\>]|\\\\|\\>)*>"#, |lex| {
 		let (encoding, decoded) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
-		(unescape_quoted_identifier(encoding), unescape_backslashed_verbatim(decoded))
+		Decoded {
+			encoding: unescape_quoted_identifier(encoding),
+			encoding_span: 1..encoding.len() + 1,
+			decoded: unescape_backslashed_verbatim(decoded),
+			decoded_span: lex.slice().len() - 1 - decoded.len()..lex.slice().len() - 1,
+		}
 	})]
-	Decoded((Cow<'a, String, str>, Cow<'a, String, str>)),
+	Decoded(Decoded<'a, Position>),
 
 	#[regex(r"-?\d+\.\d+", |lex| trim_trailing_0s(trim_leading_0s(lex.slice())))]
 	Float(&'a str),
@@ -153,7 +165,7 @@ pub enum Token<'a> {
 	Error,
 }
 
-impl<'a> Display for Token<'a> {
+impl<'a, Position> Display for Token<'a, Position> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmtResult {
 		match self {
 			Token::Comment(str) => write!(f, "//{}", str),
@@ -169,7 +181,9 @@ impl<'a> Display for Token<'a> {
 			Token::Thesis => write!(f, ")"),
 			Token::Comma => write!(f, ","),
 			Token::Period => write!(f, "."),
-			Token::Decoded((encoding, decoded)) => {
+			Token::Decoded(Decoded {
+				encoding, decoded, ..
+			}) => {
 				write!(f, "<{}:{}>", encoding, escape_greater(decoded))
 			}
 			Token::String(str) => write!(f, r#""{}""#, escape_double_quotes(str)),

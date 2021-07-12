@@ -48,7 +48,7 @@ impl CanonicalFormatScanner {
 	/// # Panics
 	///
 	/// This function panics in some cases where the input could not have been created by correctly parsing a text file.
-	pub fn next(&mut self, token: &Token) -> Recommendation {
+	pub fn next<Position>(&mut self, token: &Token<Position>) -> Recommendation {
 		#[allow(clippy::match_same_arms)]
 		let recommendation = match (&self.state, token) {
 			(State::Error, _) | (_, Token::Error) => Recommendation::PrependSpaceRequired,
