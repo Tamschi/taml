@@ -2,6 +2,13 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
+## 0.0.9
+
+TODO: Date
+
+* Features:
+  * Added `DiagnosticType::UnknownEncoding` and `DiagnosticType::EncodeFailed`.
+
 ## 0.0.8
 
 2021-07-12

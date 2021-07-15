@@ -227,6 +227,20 @@ enum_properties! {
 			level: DiagnosticLevel::Error,
 			title: "Missing field",
 		},
+
+		UnknownEncoding {
+			group: DiagnosticGroup::Deserialising,
+			code: 7,
+			level: DiagnosticLevel::Error,
+			title: "Unknown encoding",
+		},
+
+		EncodeFailed {
+			group: DiagnosticGroup::Deserialising,
+			code: 8,
+			level: DiagnosticLevel::Error,
+			title: "Encode failed",
+		},
 	}
 }
 
