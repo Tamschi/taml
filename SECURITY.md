@@ -4,7 +4,7 @@
 
 | Version | Supported          | ***Initial*** Reason for Removal                                                                             |
 | ------- | ------------------ | ------------------------------------------------------------------------------------------------------------ |
-| 0.0.8   | :white_check_mark: |                                                                                                              |
+| 0.0.8-9 | :white_check_mark: |                                                                                                              |
 | 0.0.7   | :shipit:           | Detailed spans for "decoded" values (`<…:…>`) use local positions in this version, which wasn't intentional. |
 | 0.0.1-6 | :white_check_mark: |                                                                                                              |
 

@@ -4,7 +4,7 @@
 
 ## 0.0.9
 
-TODO: Date
+2021-07-15
 
 * Features:
   * Added `DiagnosticType::UnknownEncoding` and `DiagnosticType::EncodeFailed`.
