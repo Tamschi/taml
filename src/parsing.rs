@@ -360,7 +360,7 @@ pub fn parse<'a, Position: Debug + Clone + PartialEq>(
 						}
 					})
 					.map(|span| Diagnostic {
-						r#type: DiagnosticType::UnrecognizedToken,
+						type_: DiagnosticType::UnrecognizedToken,
 						labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
 							None,
 							span,
@@ -381,7 +381,7 @@ pub fn parse<'a, Position: Debug + Clone + PartialEq>(
 			}
 			lexerToken::Comment(_) => {
 				reporter.report_with(|| Diagnostic {
-                    r#type: DiagnosticType::MisplacedComment,
+                    type_: DiagnosticType::MisplacedComment,
                     labels: vec![DiagnosticLabel::new(
                         "This comment appears after another comment without newline in-between, which shouldn't be possible.",
                         iter.next().expect("unreachable").span,
@@ -403,7 +403,7 @@ pub fn parse<'a, Position: Debug + Clone + PartialEq>(
 				path.truncate(depth - 1);
 				if path.len() != depth - 1 {
 					reporter.report_with(|| Diagnostic {
-                            r#type: DiagnosticType::HeadingTooDeep,
+                            type_: DiagnosticType::HeadingTooDeep,
                             labels: vec![
                                 DiagnosticLabel::new(
                                     "This heading is nested more than one level deeper than the previous one.",
@@ -421,7 +421,7 @@ pub fn parse<'a, Position: Debug + Clone + PartialEq>(
 					.is_some()
 				{
 					reporter.report_with(|| Diagnostic {
-                            r#type: DiagnosticType::SubsectionInTabularSection,
+                            type_: DiagnosticType::SubsectionInTabularSection,
                             labels: vec![
                                 DiagnosticLabel::new(
                                     "This heading is nested inside a tabular section, which is not supported.",
@@ -470,7 +470,7 @@ pub fn parse<'a, Position: Debug + Clone + PartialEq>(
 			lexerToken::HeadingHashes(_) => {
 				let start = iter.next().expect("unreachable").span.start;
 				reporter.report_with(|| Diagnostic {
-					r#type: DiagnosticType::MisplacedHeading,
+					type_: DiagnosticType::MisplacedHeading,
 					labels: vec![DiagnosticLabel::new(
 						"Expected newline before heading.",
 						start.clone()..start,
@@ -514,7 +514,7 @@ pub fn parse<'a, Position: Debug + Clone + PartialEq>(
 							vacant.insert(value);
 						} else {
 							reporter.report_with(|| Diagnostic {
-								r#type: DiagnosticType::KeyPreviouslyDefined,
+								type_: DiagnosticType::KeyPreviouslyDefined,
 								labels: vec![DiagnosticLabel::new(
 									"This key has already been assigned a value.",
 									key.span,
@@ -531,7 +531,7 @@ pub fn parse<'a, Position: Debug + Clone + PartialEq>(
 			_ => {
 				let start = iter.next().expect("unreachable").span.start;
 				reporter.report_with(|| Diagnostic {
-					r#type: DiagnosticType::MisplacedData,
+					type_: DiagnosticType::MisplacedData,
 					labels: vec![DiagnosticLabel::new(
 						if path.last().and_then(|s| s.tabular.as_ref()).is_some() {
 							"Expected either a comma (to continue this row) or a newline (before the next table row) here."
@@ -586,7 +586,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Debug + Clone + PartialEq>(
                             Some(lexerToken::Identifier(_))
                         ) {
                             reporter.report_with(||Diagnostic {
-                                r#type: DiagnosticType::MissingVariantIdentifier,
+                                type_: DiagnosticType::MissingVariantIdentifier,
                                 labels: vec![DiagnosticLabel::new(
                                     "Colons in (non-tabular) paths must be followed by a variant identifier (for a structured enum).",
                                     iter.next().map(|t| t.span),
@@ -634,7 +634,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Debug + Clone + PartialEq>(
 							.debugless_unwrap()
 						} else {
 							reporter.report_with(|| Diagnostic {
-								r#type: DiagnosticType::UnclosedListKey,
+								type_: DiagnosticType::UnclosedListKey,
 								labels: vec![
 									DiagnosticLabel::new(
 										"The list key is opened here...",
@@ -665,7 +665,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Debug + Clone + PartialEq>(
 									Some(lexerToken::Identifier(_))
 								) {
 									reporter.report_with(|| Diagnostic {
-										r#type: DiagnosticType::MissingVariantIdentifier,
+										type_: DiagnosticType::MissingVariantIdentifier,
 										labels: vec![DiagnosticLabel::new(
 											"Colons in headings must be followed by an identifier.",
 											iter.next().map(|t| t.span),
@@ -696,7 +696,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Debug + Clone + PartialEq>(
 							assert_eq!(iter.next().unwrap().token, lexerToken::Ket)
 						} else {
 							reporter.report_with(|| Diagnostic {
-								r#type: DiagnosticType::UnclosedTabularPathSection,
+								type_: DiagnosticType::UnclosedTabularPathSection,
 								labels: vec![
 									DiagnosticLabel::new(
 										"The tabular section is opened here...",
@@ -715,7 +715,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Debug + Clone + PartialEq>(
 					}
 					_ => {
 						reporter.report_with(|| Diagnostic {
-							r#type: DiagnosticType::ExpectedPathSegment,
+							type_: DiagnosticType::ExpectedPathSegment,
 							labels: vec![DiagnosticLabel::new(
 								"Expected [ or an identifier here.",
 								iter.next().map(|t| t.span),
@@ -728,7 +728,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Debug + Clone + PartialEq>(
 			}
 			Some(_) => {
 				reporter.report_with(|| Diagnostic {
-					r#type: DiagnosticType::ExpectedPathSegment,
+					type_: DiagnosticType::ExpectedPathSegment,
 					labels: vec![DiagnosticLabel::new(
 						"Expected [ or an identifier here.",
 						iter.next().map(|t| t.span),
@@ -747,7 +747,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Debug + Clone + PartialEq>(
 			Some(lexerToken::Period) => assert_eq!(iter.next().unwrap().token, lexerToken::Period),
 			_ => {
 				reporter.report_with(|| Diagnostic {
-					r#type: DiagnosticType::InvalidPathContinuation,
+					type_: DiagnosticType::InvalidPathContinuation,
 					labels: vec![DiagnosticLabel::new(
 						"Expected a period or end of line",
 						iter.next().map(|t| t.span),
@@ -806,7 +806,7 @@ fn parse_tabular_path_segment<'a, Position: Debug + Clone + PartialEq>(
 					})
 				} else {
 					reporter.report_with(|| Diagnostic {
-						r#type: DiagnosticType::UnclosedTabularPathMultiSegment,
+						type_: DiagnosticType::UnclosedTabularPathMultiSegment,
 						labels: vec![
 							DiagnosticLabel::new(
 								"This multi segment starts here...",
@@ -846,7 +846,7 @@ fn parse_tabular_path_segment<'a, Position: Debug + Clone + PartialEq>(
 							Some(lexerToken::Identifier(_))
 						) {
 							reporter.report_with(|| Diagnostic {
-								r#type: DiagnosticType::MissingVariantIdentifier,
+								type_: DiagnosticType::MissingVariantIdentifier,
 								labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
 									None,
 									iter.next().map(|t| t.span.start.clone()..t.span.start),
@@ -894,7 +894,7 @@ fn parse_tabular_path_segment<'a, Position: Debug + Clone + PartialEq>(
 						ket.span.end
 					} else {
 						reporter.report_with(|| Diagnostic {
-							r#type: DiagnosticType::ExpectedListIdentifier,
+							type_: DiagnosticType::ExpectedListIdentifier,
 							labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
 								None,
 								iter.next().map(|t| t.span),
@@ -925,7 +925,7 @@ fn parse_tabular_path_segment<'a, Position: Debug + Clone + PartialEq>(
 								.debugless_unwrap()
 							} else {
 								reporter.report_with(|| Diagnostic {
-									r#type: DiagnosticType::MissingVariantIdentifier,
+									type_: DiagnosticType::MissingVariantIdentifier,
 									labels: vec![DiagnosticLabel::new(
 										"Colons in paths must be followed by a variant identifier.",
 										iter.next().map(|t| t.span),
@@ -940,7 +940,7 @@ fn parse_tabular_path_segment<'a, Position: Debug + Clone + PartialEq>(
 					})
 				} else {
 					reporter.report_with(|| Diagnostic {
-						r#type: DiagnosticType::ExpectedListIdentifier,
+						type_: DiagnosticType::ExpectedListIdentifier,
 						labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
 							None,
 							iter.next().map(|t| t.span),
@@ -952,7 +952,7 @@ fn parse_tabular_path_segment<'a, Position: Debug + Clone + PartialEq>(
 			}
 			_ => {
 				reporter.report_with(|| Diagnostic {
-					r#type: DiagnosticType::ExpectedTabularPathSegment,
+					type_: DiagnosticType::ExpectedTabularPathSegment,
 					labels: vec![DiagnosticLabel::new(
 						"Expected {, [ or an identifier here.",
 						iter.next().map(|t| t.span),
@@ -1032,7 +1032,7 @@ fn instantiate<'a, 'b, Position: Debug + Clone + PartialEq>(
 						} => map,
 						Taml { span, .. } => {
 							reporter.report_with(|| Diagnostic {
-								r#type: DiagnosticType::NonMapValueSelected,
+								type_: DiagnosticType::NonMapValueSelected,
 								labels: vec![
 									DiagnosticLabel::new(
 										"This key is assigned something other than a map here...",
@@ -1051,7 +1051,7 @@ fn instantiate<'a, 'b, Position: Debug + Clone + PartialEq>(
 					},
 					(true, Some(_)) => {
 						reporter.report_with(|| Diagnostic {
-							r#type: DiagnosticType::DuplicateEnumInstantiation,
+							type_: DiagnosticType::DuplicateEnumInstantiation,
 							labels: vec![
 								DiagnosticLabel::new(
 									"This enum value has already been assigned here...",
@@ -1155,7 +1155,7 @@ fn parse_key_value_pair<'a, Position: Debug + Clone + PartialEq>(
 				))
 			} else {
 				reporter.report_with(|| Diagnostic {
-					r#type: DiagnosticType::ExpectedKeyValuePair,
+					type_: DiagnosticType::ExpectedKeyValuePair,
 					labels: vec![DiagnosticLabel::new(
 						"Expected colon.",
 						iter.next().map(|t| t.span.start.clone()..t.span.start),
@@ -1167,7 +1167,7 @@ fn parse_key_value_pair<'a, Position: Debug + Clone + PartialEq>(
 			(key, parse_value(iter, reporter)?)
 		} else {
 			reporter.report_with(||Diagnostic {
-                r#type: DiagnosticType::ExpectedKeyValuePair,
+                type_: DiagnosticType::ExpectedKeyValuePair,
                 labels: vec![DiagnosticLabel ::new(
                     "Structured sections can only contain subsections and key-value pairs.\nKey-value pairs must start with an identifier.",
                     iter.next().map(|t| t.span),
@@ -1191,7 +1191,7 @@ fn parse_values_line<'a, Position: Debug + Clone + PartialEq>(
 			values.push(parse_value(iter, reporter)?)
 		} else {
 			reporter.report_with(|| Diagnostic {
-				r#type: DiagnosticType::ValuesLineTooShort,
+				type_: DiagnosticType::ValuesLineTooShort,
 				labels: vec![DiagnosticLabel::new(
 					"Expected comma here.",
 					iter.next().map(|t| t.span.start.clone()..t.span.start),
@@ -1218,7 +1218,7 @@ fn parse_value<'a, Position: Debug + Clone + PartialEq>(
 		reporter: &mut impl Reporter<Position>,
 	) -> Result<Taml<'a, Position>, ()> {
 		reporter.report_with(|| Diagnostic {
-			r#type: DiagnosticType::ExpectedValue,
+			type_: DiagnosticType::ExpectedValue,
 			labels: vec![DiagnosticLabel::new::<&'static str, _, _>(
 				None,
 				span,
@@ -1258,7 +1258,7 @@ fn parse_value<'a, Position: Debug + Clone + PartialEq>(
 					}
 				} else {
 					reporter.report_with(|| Diagnostic {
-						r#type: DiagnosticType::UnclosedList,
+						type_: DiagnosticType::UnclosedList,
 						labels: vec![
 							DiagnosticLabel::new(
 								"This list starts here...",
