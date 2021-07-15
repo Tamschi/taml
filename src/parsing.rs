@@ -1,7 +1,7 @@
 use crate::{
 	diagnostics::{Diagnostic, DiagnosticLabel, DiagnosticLabelPriority, DiagnosticType, Reporter},
 	token::Token as lexerToken,
-	Decoded,
+	DataLiteral,
 };
 use cervine::Cow;
 use debugless_unwrap::DebuglessUnwrap as _;
@@ -79,7 +79,7 @@ impl<'a, Position> Taml<'a, Position> {
 #[derive(Debug, Clone)]
 pub enum TamlValue<'a, Position> {
 	String(Cow<'a, String, str>),
-	Decoded(Decoded<'a, Position>),
+	DataLiteral(DataLiteral<'a, Position>),
 	Integer(&'a str),
 	Float(&'a str),
 	List(List<'a, Position>),
@@ -1280,8 +1280,8 @@ fn parse_value<'a, Position: Debug + Clone + PartialEq>(
 				value: TamlValue::String(str),
 				span,
 			},
-			(lexerToken::Decoded(decoded), span) => Taml {
-				value: TamlValue::Decoded(decoded),
+			(lexerToken::DataLiteral(data_literal), span) => Taml {
+				value: TamlValue::DataLiteral(data_literal),
 				span,
 			},
 			(lexerToken::Float(str), span) => Taml {

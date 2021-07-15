@@ -20,11 +20,11 @@ mod token;
 pub use parsing::parse;
 pub use token::Token;
 
-/// Shared variant payload data structure for decoded strings (`<…:…>`).
+/// Shared variant payload data structure for data literals (`<…:…>`).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Decoded<'a, Position> {
+pub struct DataLiteral<'a, Position> {
 	pub encoding: Cow<'a, String, str>,
 	pub encoding_span: Range<Position>,
-	pub decoded: Cow<'a, String, str>,
-	pub decoded_span: Range<Position>,
+	pub unencoded_data: Cow<'a, String, str>,
+	pub unencoded_data_span: Range<Position>,
 }

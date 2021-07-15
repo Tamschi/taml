@@ -1,4 +1,4 @@
-use crate::Decoded;
+use crate::DataLiteral;
 use cervine::Cow;
 use gnaw::Unshift as _;
 use lazy_transform_str::{
@@ -128,24 +128,24 @@ pub enum Token<'a, Position> {
 	String(Cow<'a, String, str>),
 
 	#[regex(r#"<[a-zA-Z_][a-zA-Z\-_0-9]*:([^\\>]|\\\\|\\>)*>"#, |lex| {
-		let (encoding, decoded) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
-		Decoded {
+		let (encoding, unencoded_data) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
+		DataLiteral {
 			encoding: Cow::Borrowed(encoding),
 			encoding_span: lex.span().start + 1..lex.span().start + 1 + encoding.len(),
-			decoded: unescape_backslashed_verbatim(decoded),
-			decoded_span: lex.span().end - 1 - decoded.len()..lex.span().end - 1,
+			unencoded_data: unescape_backslashed_verbatim(unencoded_data),
+			unencoded_data_span: lex.span().end - 1 - unencoded_data.len()..lex.span().end - 1,
 		}
 	})]
 	#[regex(r#"<`([^\\`]|\\\\|\\`)*`:([^\\>]|\\\\|\\>)*>"#, |lex| {
-		let (encoding, decoded) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
-		Decoded {
+		let (encoding, unencoded_data) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
+		DataLiteral {
 			encoding: unescape_quoted_identifier(encoding),
 			encoding_span: lex.span().start + 1..lex.span().start + 1 + encoding.len(),
-			decoded: unescape_backslashed_verbatim(decoded),
-			decoded_span: lex.span().end - 1 - decoded.len()..lex.span().end - 1,
+			unencoded_data: unescape_backslashed_verbatim(unencoded_data),
+			unencoded_data_span: lex.span().end - 1 - unencoded_data.len()..lex.span().end - 1,
 		}
 	})]
-	Decoded(Decoded<'a, Position>),
+	DataLiteral(DataLiteral<'a, Position>),
 
 	#[regex(r"-?\d+\.\d+", |lex| trim_trailing_0s(trim_leading_0s(lex.slice())))]
 	Float(&'a str),
@@ -181,10 +181,12 @@ impl<'a, Position> Display for Token<'a, Position> {
 			Token::Thesis => write!(f, ")"),
 			Token::Comma => write!(f, ","),
 			Token::Period => write!(f, "."),
-			Token::Decoded(Decoded {
-				encoding, decoded, ..
+			Token::DataLiteral(DataLiteral {
+				encoding,
+				unencoded_data,
+				..
 			}) => {
-				write!(f, "<{}:{}>", encoding, escape_greater(decoded))
+				write!(f, "<{}:{}>", encoding, escape_greater(unencoded_data))
 			}
 			Token::String(str) => write!(f, r#""{}""#, escape_double_quotes(str)),
 			Token::Float(str) | Token::Integer(str) => write!(f, "{}", str),
