@@ -27,21 +27,12 @@ Please refer to the table of contents to the left for examples and details.
 
 	TAML is explicitly not a data transfer format.
 
-	Most notably, it is **not streamable**, as repeated fields are not valid and *must* lead to a parsing error.
+	Most notably, it is **not streamable**, as repeated non-list fields are not valid and *must* lead to a parsing error before any data becomes effective. *This includes unrelated preceding data in the same document.*
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :glob:
 
 	grammar
 	diagnostics
 	formatting
-
-
-
-.. Indices and tables
-.. ==================
-
-.. * :ref:`genindex`
-.. * :ref:`modindex`
-.. * :ref:`search`
