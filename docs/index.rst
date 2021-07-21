@@ -30,7 +30,7 @@ Please refer to the table of contents to the left for examples and details.
 	Most notably, it is **not streamable**, as repeated non-list fields are not valid and *must* lead to a parsing error before any data becomes effective. *This includes unrelated preceding data in the same document.*
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 5
    :glob:
 
 	grammar
