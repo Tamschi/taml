@@ -73,3 +73,46 @@ It continues until a heading with at most equal depth is encountered or up to th
 
 	#
 	fourth: 4
+
+Tabular Sections
+^^^^^^^^^^^^^^^^
+
+Tabular sections are a special shorthand to quickly define lists with structured content.
+
+The following are equivalent:
+
+.. code-block:: taml
+
+	# [[dishes].{id, name, [price].{currency, amount}]
+	<luid:d6fce69d-9c9d>, "A", EUR, 10.95
+	<luid:c37dcc6a-2002>, "B", EUR, 5.50
+	<luid:00000000-0000>, "Test Item", EUR, 0.0
+
+.. code-block:: taml
+
+	# [dishes]
+	id: <luid:d6fce69d-9c9d>
+	name: "A"
+	## price
+	currency: EUR
+	amount: 10.95
+
+	# [dishes]
+	id: <luid:c37dcc6a-2002>
+	name: "B"
+	## price
+	currency: EUR
+	amount: 5.50
+
+	# [dishes]
+	id: <luid:00000000-0000>
+	name: "Test Item"
+	## price
+	currency: EUR
+	amount: 0.0
+
+.. hint::
+
+	As of right now, there is intentionally no way to define common values once per table.
+
+	I haven't found a way to express this that both is intuitive and won't make copy/paste errors much more likely.
