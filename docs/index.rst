@@ -1,7 +1,7 @@
 .. TAML documentation master file, created by
-   sphinx-quickstart on Sat Jul 17 14:59:37 2021.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+	sphinx-quickstart on Sat Jul 17 14:59:37 2021.
+	You can adapt this file completely to your liking, but it should at least
+	contain the root `toctree` directive.
 
 TAML Reference Documentation
 ============================
@@ -30,9 +30,7 @@ Please refer to the table of contents to the left for examples and details.
 	Most notably, it is **not streamable**, as repeated non-list fields are not valid and *must* lead to a parsing error before any data becomes effective. *This includes unrelated preceding data in the same document.*
 
 .. toctree::
-   :maxdepth: 5
-   :glob:
+	:maxdepth: 2
+	:glob:
 
-	grammar
-	diagnostics
-	formatting
+	*

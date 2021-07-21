@@ -73,8 +73,3 @@ It continues until a heading with at most equal depth is encountered or up to th
 
 	#
 	fourth: 4
-
-.. toctree::
-	:glob:
-
-	grammar/*

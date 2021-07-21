@@ -1,4 +1,2 @@
-.. toctree::
-	:glob:
-
-	diagnostics/*
+TAML Diagnostics
+================
