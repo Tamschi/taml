@@ -23,10 +23,6 @@ project = 'TAML'
 copyright = '2021, Tamme Schichler'
 author = 'Tamme Schichler'
 
-version = '0.0.1'
-version = '0.0.1-develop'
-
-
 # -- General configuration ---------------------------------------------------
 
 # Add any Sphinx extension module names here, as strings. They can be
@@ -36,9 +32,6 @@ extensions = []
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
-
-source_suffix = '.rst'
-master_doc = 'index'
 
 pygments_style = 'sphinx'
 
