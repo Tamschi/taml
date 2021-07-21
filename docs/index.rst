@@ -33,4 +33,7 @@ Please refer to the table of contents to the left for examples and details.
 	:maxdepth: 2
 	:glob:
 
-	*
+	self
+	grammar
+	diagnostics
+	formatting
