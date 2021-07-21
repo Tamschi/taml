@@ -42,7 +42,9 @@ This may not be the case if a ``,`` or identifier is expected, or if a bracket i
 Line breaks
 -----------
 
-TAML does not use commas to delineate values, outside of inline lists and table rows. Instead, line breaks are a grammar token.
+TAML does not use commas to delineate values, outside of `inline lists`_ and rows_.
+
+Instead, line breaks are a grammar token that separates comments_, headings_, `key-value pairs`_ and table_ rows_.
 
 .. warning::
 
@@ -108,6 +110,8 @@ All other sequences starting with a backslash are invalid in quoted strings and 
 
 	TK: Define an error code that should be used here. Something like TAML-L0001?
 
+.. _key-value pairs:
+
 Keys
 ----
 
@@ -154,6 +158,14 @@ Unit variants are written as single identifiers_.
 
 Notable unit variants are the boolean values ``true`` and ``false``, which are not associated with more specific grammar in TAML.
 
+List
+----
+
+TK
+
+Inline Lists
+^^^^^^^^^^^^
+
 .. _section:
 
 Sections
@@ -161,12 +173,15 @@ Sections
 
 TAML's grammar is, roughly speaking, split into three contexts:
 
-- structure sections
+- structural sections
 - headings
 - tabular sections
 
-The initial context is a structure section.
-Structure sections can contain key-value pairs and nested sections, which can be structure sections.
+Structural Sections
+^^^^^^^^^^^^^^^^^^^
+
+The initial context is a structural section.
+Structural sections can contain key-value pairs and nested sections, which can be structural sections.
 
 .. code-block:: taml
 
@@ -179,7 +194,8 @@ Structure sections can contain key-value pairs and nested sections, which can be
 
 Each nested section is introduced by a heading nested *exactly* one deeper than the surrounding section's.
 
-It continues until a heading with at most equal depth is encountered or up to the end of the file. An empty nested heading can be used to semantically (but not grammatically!) return to its immediately surrounding structure section.
+It continues until a heading with at most equal depth is encountered or up to the end of the file.
+An empty nested heading can be used to semantically (but not grammatically!) return to its immediately surrounding structural section.
 
 .. code-block:: taml
 
@@ -200,6 +216,11 @@ It continues until a heading with at most equal depth is encountered or up to th
 
 	#
 	fourth: 4
+
+Headings
+^^^^^^^^
+
+.. _table:
 
 Tabular Sections
 ^^^^^^^^^^^^^^^^
@@ -243,3 +264,10 @@ The following are equivalent:
 	As of right now, there is intentionally no way to define common values once per table.
 
 	I haven't found a way to express this that both is intuitive and won't make copy/paste errors much more likely.
+
+.. _rows:
+
+Row
+"""
+
+TK
