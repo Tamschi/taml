@@ -1,6 +1,8 @@
 TAML Grammar Reference
 ======================
 
+TK: Use singular for headings.
+
 Whitespace
 ----------
 
@@ -53,6 +55,8 @@ Empty lines and lines containing only a comment always can be removed without ch
 .. hint::
 
 	``taml fmt`` preserves single empty lines but collapses longer blank parts of the document.
+
+	``taml fix`` can fix your line endings for you without changing the meaning of quotes. (TODO)
 
 Identifiers
 -----------
