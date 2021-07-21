@@ -52,7 +52,7 @@ Instead, line breaks are a grammar token that separates comments_, headings_, `k
 
 	`U+000D CARRIAGE RETURN (CR) <https://graphemica.com/000D>`_ is an illegal character everywhere in TAML unless quoted.
 
-Empty lines and lines containing only a comment always can be removed without changing the structure or contents of the document.
+Empty lines outside of quotes and lines containing only a comment always can be removed without changing the structure or contents of the document.
 
 .. hint::
 
