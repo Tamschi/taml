@@ -36,8 +36,7 @@ At (nearly) any point in the document, a line comment can be written as follows:
 	// This is a comment. It stretches for the rest of the line.
 	// This is another comment.
 
-The only limitation to comment placement is that the line up to that point must be valid.
-This may not be the case if a ``:``, key_ or value_ is expected, a row_ is incomplete, or if a bracket is unmatched.
+The only limitation to comment placement is that the line up to that point must be otherwise complete.
 
 Line breaks
 -----------
