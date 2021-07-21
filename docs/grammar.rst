@@ -37,7 +37,7 @@ At (nearly) any point in the document, a line comment can be written as follows:
 	// This is another comment.
 
 The only limitation to comment placement is that the line up to that point must be valid.
-This may not be the case if a ``,`` or identifier is expected, or if a bracket is unmatched.
+This may not be the case if a ``:``, key_ or value_ is expected, a row_ is incomplete, or if a bracket is unmatched.
 
 Line breaks
 -----------
@@ -112,8 +112,8 @@ All other sequences starting with a backslash are invalid in quoted strings and 
 
 .. _key-value pairs:
 
-Keys
-----
+Key
+---
 
 Only identifiers_ may be keys. Keys appear in section_ headers, enum variants_ and as part of key-value pairs like the following:
 
@@ -123,10 +123,8 @@ Only identifiers_ may be keys. Keys appear in section_ headers, enum variants_ a
 
 (``value`` is a `unit variant`_ here, but could be replaced with any other value_.)
 
-.. _value:
-
-Values
-------
+Value
+-----
 
 A value is any one of the following:
 
