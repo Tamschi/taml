@@ -62,6 +62,38 @@ Lists continue up to the next heading or end of document. They may not contain n
 Each row in the table creates a new column in the list assigned to the ``items`` field,
 while empty lines and lines with only a comment are ignored.
 
+Enums
+-----
+
+Enum values are written as variant identifier, optionally followed by a list:
+
+.. code-block:: taml
+
+	unit_variant: Unit
+	empty_variant: Empty()
+	newtype_variant: SameAsBefore("This is a nested value.")
+	tuple_variant: Tuple(1, 2.0, 3, 4, 5)
+
+.. hint::
+
+	Booleans are normally treated as enumeration type with the unit variants ``false`` and ``true``.
+
+.. hint::
+
+	Nullability, as for example expressed by the ``Option<…>`` type in Rust, should translate to optional fields rather explicit enum values.
+
+Structural Variant
+^^^^^^^^^^^^^^^^^^
+
+Structural variants can't be expressed inline.
+Instead, ``:Variant`` is attached to the respective field name in a heading:
+
+.. code-block:: taml
+
+	# a_field:AVariant
+	a: ()
+	b: ()
+
 Structural Section
 ------------------
 
