@@ -61,7 +61,8 @@ Empty lines outside of quotes and lines containing only a comment always can be 
 
 	``taml fmt`` preserves single empty lines but collapses longer blank parts of the document.
 
-	``taml fix`` can fix your line endings for you without changing the meaning of quotes. It warns about any quoted occurrence of the character by default. (TODO)
+	``taml fix`` can fix your line endings for you without changing the meaning of quotes. (TODO)
+	It warns about any occurrence of the character it doesn't fix by default, in either sense. (TODO)
 
 Identifiers
 -----------
