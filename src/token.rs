@@ -148,7 +148,7 @@ pub enum Token<'a, Position> {
 	DataLiteral(DataLiteral<'a, Position>),
 
 	#[regex(r"-?\d+\.\d+", |lex| trim_trailing_0s(trim_leading_0s(lex.slice())))]
-	Float(&'a str),
+	Decimal(&'a str),
 
 	#[regex(r"-?\d+", |lex| trim_leading_0s(lex.slice()))]
 	Integer(&'a str),
@@ -189,7 +189,7 @@ impl<'a, Position> Display for Token<'a, Position> {
 				write!(f, "<{}:{}>", encoding, escape_greater(unencoded_data))
 			}
 			Token::String(str) => write!(f, r#""{}""#, escape_double_quotes(str)),
-			Token::Float(str) | Token::Integer(str) => write!(f, "{}", str),
+			Token::Decimal(str) | Token::Integer(str) => write!(f, "{}", str),
 			Token::Colon => write!(f, ":"),
 			Token::Identifier(str) => write!(f, "{}", escape_identifier(str)),
 			Token::Error => panic!(),
@@ -241,15 +241,15 @@ fn lex() {
 			Newline,
 			String(Cow::Borrowed("$sewer/amb_drips")),
 			Comma,
-			Float("0.8"),
+			Decimal("0.8"),
 			Newline,
 			String(Cow::Borrowed("$sewer/amb_flies")),
 			Comma,
-			Float("0.1"),
+			Decimal("0.1"),
 			Newline,
 			String(Cow::Borrowed("$sewer/amb_hum")),
 			Comma,
-			Float("0.05"),
+			Decimal("0.05"),
 			Newline,
 			Newline,
 			HeadingHashes(1),
@@ -280,9 +280,9 @@ fn lex() {
 			Identifier(Cow::Borrowed("volume-range")),
 			Colon,
 			Paren,
-			Float("0.1"),
+			Decimal("0.1"),
 			Comma,
-			Float("0.15"),
+			Decimal("0.15"),
 			Thesis,
 			Newline
 		][..]

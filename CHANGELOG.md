@@ -8,6 +8,8 @@ TODO: Date
 
 * **Breaking:**
   * `Decoded` is now `DataLiteral` and so on.
+  * Renamed `Float` variants to `Decimal`
+    > as these can very much be parsed as arbitrary-precision numbers, depending on the implementation.
 
 ## 0.0.9
 

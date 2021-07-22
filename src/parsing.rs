@@ -81,7 +81,7 @@ pub enum TamlValue<'a, Position> {
 	String(Cow<'a, String, str>),
 	DataLiteral(DataLiteral<'a, Position>),
 	Integer(&'a str),
-	Float(&'a str),
+	Decimal(&'a str),
 	List(List<'a, Position>),
 	Map(Map<'a, Position>),
 	EnumVariant {
@@ -1284,8 +1284,8 @@ fn parse_value<'a, Position: Debug + Clone + PartialEq>(
 				value: TamlValue::DataLiteral(data_literal),
 				span,
 			},
-			(lexerToken::Float(str), span) => Taml {
-				value: TamlValue::Float(str),
+			(lexerToken::Decimal(str), span) => Taml {
+				value: TamlValue::Decimal(str),
 				span,
 			},
 			(lexerToken::Integer(str), span) => Taml {

@@ -69,7 +69,7 @@ impl CanonicalFormatScanner {
 
 			(State::Identifier, Token::Identifier(_)) => Recommendation::PrependSpaceRequired,
 
-			(State::Number, Token::Float(_) | Token::Integer(_)) => {
+			(State::Number, Token::Decimal(_) | Token::Integer(_)) => {
 				Recommendation::PrependSpaceRequired
 			}
 
@@ -93,7 +93,7 @@ impl CanonicalFormatScanner {
 			}
 			Token::Newline => State::SingleNewline,
 			Token::Comment(_) => State::Comment,
-			Token::Float(_) | Token::Integer(_) => State::Number,
+			Token::Decimal(_) | Token::Integer(_) => State::Number,
 			Token::Identifier(_) => State::Identifier,
 			Token::Colon | Token::Comma => State::ColonOrComma,
 			Token::Error => State::Error,
