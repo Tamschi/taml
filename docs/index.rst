@@ -34,6 +34,7 @@ Please refer to the table of contents to the left for examples and details.
 	:glob:
 
 	self
+	taml-by-example
 	grammar
 	diagnostics
 	formatting

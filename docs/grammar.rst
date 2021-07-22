@@ -1,12 +1,33 @@
+.. _grammar_reference:
+
+.. TK: warn that if you create a new implementation of the format, you should test it against to to-be-created sample files.
+
 TAML Grammar Reference
 ======================
 
+.. Style Note: This page favours absolute precision over readability.
+
+.. hint::
+
+	This page is aimed at format support implementors.
+
+	For a user manual (even when using a TAML library as developer), see :ref:`taml_by_example`.
+
 TK: Use singular for headings.
+
+All grammar is defined in terms of Unicode codepoint identity.
+
+Where available, the canonical binary or at-rest encoding of TAML is UTF-8,
+while its runtime text-API representation should use the canonical representation of arbitrary Unicode strings in the target ecosystem.
+
+.. note::
+
+	Where no standard Unicode text representation exists, it's likely best to provide only a binary UTF-8 API.
 
 Whitespace
 ----------
 
-.. hint::
+.. note::
 
 	TK: Format as regex section
 
@@ -23,7 +44,7 @@ Note that `line breaks`_ are not included here.
 Comment
 -------
 
-.. hint::
+.. note::
 
 	TK: Format as regex section
 
@@ -67,7 +88,7 @@ Empty lines outside of quotes and lines containing only a comment always can be 
 Identifiers
 -----------
 
-.. hint::
+.. note::
 
 	TK: Format as regex section
 
