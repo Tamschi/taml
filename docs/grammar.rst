@@ -18,8 +18,10 @@ Whitespace is meaningless except when separating otherwise-joined tokens.
 
 Note that `line breaks`_ are not included here.
 
-Comments
---------
+.. _comments:
+
+Comment
+-------
 
 .. hint::
 
@@ -38,8 +40,10 @@ At (nearly) any point in the document, a line comment can be written as follows:
 
 The only limitation to comment placement is that the line up to that point must be otherwise complete.
 
-Line breaks
------------
+.. _line breaks:
+
+Line break
+----------
 
 TAML does not use commas to delineate values, outside of `inline lists`_ and rows_.
 
@@ -57,7 +61,7 @@ Empty lines outside of quotes and lines containing only a comment always can be 
 
 	``taml fmt`` preserves single empty lines but collapses longer blank parts of the document.
 
-	``taml fix`` can fix your line endings for you without changing the meaning of quotes. (TODO)
+	``taml fix`` can fix your line endings for you without changing the meaning of quotes. It warns about any quoted occurrence of the character by default. (TODO)
 
 Identifiers
 -----------
