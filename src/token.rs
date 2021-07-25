@@ -74,13 +74,6 @@ fn unescape_quoted_identifier(string: &str) -> Cow<String, str> {
 	})
 }
 
-fn trim_leading_0s(mut s: &str) -> &str {
-	while s.len() >= 2 && s.as_bytes()[0] == b'0' && (b'0'..=b'9').contains(&s.as_bytes()[1]) {
-		s = &s[1..]
-	}
-	s
-}
-
 fn trim_trailing_0s(mut s: &str) -> &str {
 	while s.len() >= 2
 		&& s.as_bytes()[s.len() - 1] == b'0'
@@ -147,10 +140,12 @@ pub enum Token<'a, Position> {
 	})]
 	DataLiteral(DataLiteral<'a, Position>),
 
-	#[regex(r"-?\d+\.\d+", |lex| trim_trailing_0s(trim_leading_0s(lex.slice())))]
+	//TODO: Improve errors caused by leading `0`s.
+	#[regex(r"-?(0|[1-9]\d*)\.\d+", |lex| trim_trailing_0s(lex.slice()))]
 	Decimal(&'a str),
 
-	#[regex(r"-?\d+", |lex| trim_leading_0s(lex.slice()))]
+	//TODO: Improve errors caused by leading `0`s.
+	#[regex(r"-?(0|[1-9]\d*)", |lex| lex.slice())]
 	Integer(&'a str),
 
 	#[token(":")]
@@ -205,15 +200,15 @@ fn lex() {
 
 	let source = r#"//This is a comment
     # [[loops].{sound, volume}]
-    "$sewer/amb_drips", 0000.8
+    "$sewer/amb_drips", 0.8
     "$sewer/amb_flies", 0.1000
-    "$sewer/amb_hum", 000.0500
-    
+    "$sewer/amb_hum", 0.0500
+
     # [moments]
     sound: "$sewer/moments/*"
     layers: 1
     first-interval-no-min: true
-    interval-range: (10, 0060)
+    interval-range: (10, 60)
     volume-range: (0.1, 0.15)
     "#;
 

@@ -162,10 +162,67 @@ TK
 
 	In some cases, remapping TAML value types is a good idea, like when parsing `rust_decimal <https://crates.io/crates/rust-decimal>`_ values using `Serde <https://crates.io/crates/serde>`_, which should still be written as decimals_ in TAML but internally processed as strings. Such remappings should be done explicitly on a case-by-case basis.
 
-Decimals
---------
+Integer
+-------
 
-TK
+.. note::
+
+	TK: Format as regex section
+
+	.. code-block:: regex
+
+		-?(0|[1-9]\d*)
+
+A whole number with base 10.
+Note that  ``-0`` is legal and *may* be interpreted differently from ``0``.
+
+Additional leading zeroes are disallowed to avoid confusion with languages and/or parsing systems where this would denote base 8.
+
+.. hint::
+
+	If your configuration requires setting a bitfield, consider accepting it as data literal e.g. like this instead:
+
+	.. code-block:: taml
+
+		some_bitfield: <bits:1000_0001 1111_0000>
+		another_encoding: <hex:81 F0>
+
+Decimal
+-------
+
+.. note::
+
+	TK: Format as regex section
+
+	.. code-block:: regex
+
+		-?(0|[1-9]\d*)\.\d+
+
+A fractional base 10 number.
+Note that  ``-0`` is legal and *may* be interpreted differently from ``0``.
+
+Additional leading zeroes are disallowed for consistency with integers.
+Additional trailing zeroes are considered idempotent and **must not make a difference when parsing a value**.
+
+.. note::
+
+	Integers and decimals *should* be considered disjoint.
+	Don't accept one for the other unless not doing so would be unusually inconvenient.
+
+.. note::
+
+	Decimals, like integers, are not required to fit any particular binary representation.
+
+	For example, they could be parsed and processed with arbitrary precision rather than as IEEE 754 float.
+
+.. warning::
+
+	``taml fmt`` removes idempotent trailing zeroes from decimals.
+
+	``serde_taml`` excludes them while lexing, which also affects ``reserde``.
+
+	Absolutely do not make any distinction regarding additional trailing zeroes in decimals when writing a lexer or parser.
+
 
 .. _variants:
 
