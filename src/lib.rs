@@ -28,3 +28,5 @@ pub struct DataLiteral<'a, Position> {
 	pub unencoded_data: Cow<'a, String, str>,
 	pub unencoded_data_span: Range<Position>,
 }
+
+pub use smartstring::validate;

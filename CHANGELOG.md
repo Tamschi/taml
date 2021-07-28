@@ -11,6 +11,11 @@ TODO: Date
   * Renamed `Float` variants to `Decimal`
     > as these can very much be parsed as arbitrary-precision numbers, depending on the implementation.
 
+* Features:
+  * `smartstring::validate` is now re-exported as `validate`.
+
+    > You should call this to ensure the memory layout is correct!
+
 ## 0.0.9
 
 2021-07-15
