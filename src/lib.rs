@@ -1,7 +1,10 @@
-#![doc(html_root_url = "https://docs.rs/taml/0.0.9")]
+#![doc(html_root_url = "https://docs.rs/taml/0.0.10")]
 #![warn(clippy::pedantic)]
 #![allow(clippy::result_unit_err)]
-#![allow(clippy::trivially_copy_pass_by_ref)]
+#![allow(
+	clippy::semicolon_if_nothing_returned,
+	clippy::trivially_copy_pass_by_ref
+)]
 
 use cervine::Cow;
 use core::ops::Range;
@@ -20,11 +23,13 @@ mod token;
 pub use parsing::parse;
 pub use token::Token;
 
-/// Shared variant payload data structure for decoded strings (`<…:…>`).
+/// Shared variant payload data structure for data literals (`<…:…>`).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Decoded<'a, Position> {
+pub struct DataLiteral<'a, Position> {
 	pub encoding: Cow<'a, String, str>,
 	pub encoding_span: Range<Position>,
-	pub decoded: Cow<'a, String, str>,
-	pub decoded_span: Range<Position>,
+	pub unencoded_data: Cow<'a, String, str>,
+	pub unencoded_data_span: Range<Position>,
 }
+
+pub use smartstring::validate;

@@ -69,9 +69,13 @@ impl CanonicalFormatScanner {
 
 			(State::Identifier, Token::Identifier(_)) => Recommendation::PrependSpaceRequired,
 
-			(State::Number, Token::Float(_) | Token::Integer(_)) => {
-				Recommendation::PrependSpaceRequired
-			}
+			(
+				State::Number,
+				Token::Decimal(_)
+				| Token::Integer(_)
+				| Token::InvalidZeroPrefixedDecimal(_)
+				| Token::InvalidZeroPrefixedInteger(_),
+			) => Recommendation::PrependSpaceRequired,
 
 			(State::SingleNewline | State::MultiNewlineOrInitial, Token::Comment(_)) => {
 				Recommendation::Required
@@ -93,11 +97,25 @@ impl CanonicalFormatScanner {
 			}
 			Token::Newline => State::SingleNewline,
 			Token::Comment(_) => State::Comment,
-			Token::Float(_) | Token::Integer(_) => State::Number,
+			Token::Decimal(_)
+			| Token::Integer(_)
+			| Token::InvalidZeroPrefixedDecimal(_)
+			| Token::InvalidZeroPrefixedInteger(_) => State::Number,
 			Token::Identifier(_) => State::Identifier,
 			Token::Colon | Token::Comma => State::ColonOrComma,
 			Token::Error => State::Error,
-			_ => State::Other,
+
+			// Intentionally not `_` so that this fails to compile when tokens are added.
+			// When adding match arms here, also add them above if necessary.
+			Token::Brac
+			| Token::Ket
+			| Token::Bra
+			| Token::Ce
+			| Token::Paren
+			| Token::Thesis
+			| Token::Period
+			| Token::String(_)
+			| Token::DataLiteral(_) => State::Other,
 		};
 
 		recommendation

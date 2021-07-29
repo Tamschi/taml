@@ -1,4 +1,4 @@
-use crate::Decoded;
+use crate::DataLiteral;
 use cervine::Cow;
 use gnaw::Unshift as _;
 use lazy_transform_str::{
@@ -74,13 +74,6 @@ fn unescape_quoted_identifier(string: &str) -> Cow<String, str> {
 	})
 }
 
-fn trim_leading_0s(mut s: &str) -> &str {
-	while s.len() >= 2 && s.as_bytes()[0] == b'0' && (b'0'..=b'9').contains(&s.as_bytes()[1]) {
-		s = &s[1..]
-	}
-	s
-}
-
 fn trim_trailing_0s(mut s: &str) -> &str {
 	while s.len() >= 2
 		&& s.as_bytes()[s.len() - 1] == b'0'
@@ -128,30 +121,36 @@ pub enum Token<'a, Position> {
 	String(Cow<'a, String, str>),
 
 	#[regex(r#"<[a-zA-Z_][a-zA-Z\-_0-9]*:([^\\>]|\\\\|\\>)*>"#, |lex| {
-		let (encoding, decoded) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
-		Decoded {
+		let (encoding, unencoded_data) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
+		DataLiteral {
 			encoding: Cow::Borrowed(encoding),
 			encoding_span: lex.span().start + 1..lex.span().start + 1 + encoding.len(),
-			decoded: unescape_backslashed_verbatim(decoded),
-			decoded_span: lex.span().end - 1 - decoded.len()..lex.span().end - 1,
+			unencoded_data: unescape_backslashed_verbatim(unencoded_data),
+			unencoded_data_span: lex.span().end - 1 - unencoded_data.len()..lex.span().end - 1,
 		}
 	})]
 	#[regex(r#"<`([^\\`]|\\\\|\\`)*`:([^\\>]|\\\\|\\>)*>"#, |lex| {
-		let (encoding, decoded) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
-		Decoded {
+		let (encoding, unencoded_data) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
+		DataLiteral {
 			encoding: unescape_quoted_identifier(encoding),
 			encoding_span: lex.span().start + 1..lex.span().start + 1 + encoding.len(),
-			decoded: unescape_backslashed_verbatim(decoded),
-			decoded_span: lex.span().end - 1 - decoded.len()..lex.span().end - 1,
+			unencoded_data: unescape_backslashed_verbatim(unencoded_data),
+			unencoded_data_span: lex.span().end - 1 - unencoded_data.len()..lex.span().end - 1,
 		}
 	})]
-	Decoded(Decoded<'a, Position>),
+	DataLiteral(DataLiteral<'a, Position>),
 
-	#[regex(r"-?\d+\.\d+", |lex| trim_trailing_0s(trim_leading_0s(lex.slice())))]
-	Float(&'a str),
+	#[regex(r"-?(0|[1-9]\d*)\.\d+", |lex| trim_trailing_0s(lex.slice()))]
+	Decimal(&'a str),
 
-	#[regex(r"-?\d+", |lex| trim_leading_0s(lex.slice()))]
+	#[regex(r"-?(0\d+)\.\d+", |lex| trim_trailing_0s(lex.slice()))]
+	InvalidZeroPrefixedDecimal(&'a str),
+
+	#[regex(r"-?(0|[1-9]\d*)", |lex| lex.slice())]
 	Integer(&'a str),
+
+	#[regex(r"-?(0\d+)", |lex| lex.slice())]
+	InvalidZeroPrefixedInteger(&'a str),
 
 	#[token(":")]
 	Colon,
@@ -165,6 +164,9 @@ pub enum Token<'a, Position> {
 	Error,
 }
 
+/// # Panics
+///
+/// This [`Display`] implementation panics when called on [`Token::Error`].
 impl<'a, Position> Display for Token<'a, Position> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmtResult {
 		match self {
@@ -181,16 +183,21 @@ impl<'a, Position> Display for Token<'a, Position> {
 			Token::Thesis => write!(f, ")"),
 			Token::Comma => write!(f, ","),
 			Token::Period => write!(f, "."),
-			Token::Decoded(Decoded {
-				encoding, decoded, ..
+			Token::DataLiteral(DataLiteral {
+				encoding,
+				unencoded_data,
+				..
 			}) => {
-				write!(f, "<{}:{}>", encoding, escape_greater(decoded))
+				write!(f, "<{}:{}>", encoding, escape_greater(unencoded_data))
 			}
 			Token::String(str) => write!(f, r#""{}""#, escape_double_quotes(str)),
-			Token::Float(str) | Token::Integer(str) => write!(f, "{}", str),
+			Token::Decimal(str)
+			| Token::Integer(str)
+			| Self::InvalidZeroPrefixedDecimal(str)
+			| Token::InvalidZeroPrefixedInteger(str) => write!(f, "{}", str),
 			Token::Colon => write!(f, ":"),
 			Token::Identifier(str) => write!(f, "{}", escape_identifier(str)),
-			Token::Error => panic!(),
+			Token::Error => panic!("Tried to `Display::fmt` `taml::token::Token::Error`."),
 		}
 	}
 }
@@ -203,15 +210,15 @@ fn lex() {
 
 	let source = r#"//This is a comment
     # [[loops].{sound, volume}]
-    "$sewer/amb_drips", 0000.8
+    "$sewer/amb_drips", 0.8
     "$sewer/amb_flies", 0.1000
-    "$sewer/amb_hum", 000.0500
-    
+    "$sewer/amb_hum", 0.0500
+
     # [moments]
     sound: "$sewer/moments/*"
     layers: 1
     first-interval-no-min: true
-    interval-range: (10, 0060)
+    interval-range: (10, 60)
     volume-range: (0.1, 0.15)
     "#;
 
@@ -239,15 +246,15 @@ fn lex() {
 			Newline,
 			String(Cow::Borrowed("$sewer/amb_drips")),
 			Comma,
-			Float("0.8"),
+			Decimal("0.8"),
 			Newline,
 			String(Cow::Borrowed("$sewer/amb_flies")),
 			Comma,
-			Float("0.1"),
+			Decimal("0.1"),
 			Newline,
 			String(Cow::Borrowed("$sewer/amb_hum")),
 			Comma,
-			Float("0.05"),
+			Decimal("0.05"),
 			Newline,
 			Newline,
 			HeadingHashes(1),
@@ -278,9 +285,9 @@ fn lex() {
 			Identifier(Cow::Borrowed("volume-range")),
 			Colon,
 			Paren,
-			Float("0.1"),
+			Decimal("0.1"),
 			Comma,
-			Float("0.15"),
+			Decimal("0.15"),
 			Thesis,
 			Newline
 		][..]

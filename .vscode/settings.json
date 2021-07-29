@@ -8,8 +8,10 @@
 		"FIXME",
 		"TODO",
 		"XXX",
-		"todo!"
+		"todo!",
+		"TK"
 	],
 	"todo-tree.regex.regex": "(($TAGS)|^\\s*- \\[ \\])",
-	"rust-analyzer.cargo.allFeatures": true
+	"rust-analyzer.cargo.allFeatures": true,
+	"restructuredtext.confPath": "${workspaceFolder}\\docs"
 }

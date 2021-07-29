@@ -39,6 +39,20 @@ enum_properties! {
 			title: "Unrecognised token",
 		},
 
+		ZeroPrefixedDecimalFound {
+			group: DiagnosticGroup::Lexing,
+			code: 1,
+			level: DiagnosticLevel::Error,
+			title: "Zero-prefixed decimal found",
+		},
+
+		ZeroPrefixedIntegerFound {
+			group: DiagnosticGroup::Lexing,
+			code: 2,
+			level: DiagnosticLevel::Error,
+			title: "Zero-prefixed integer found",
+		},
+
 		HeadingTooDeep {
 			group: DiagnosticGroup::Parsing,
 			code: 1,
@@ -283,24 +297,24 @@ impl<Position> DiagnosticLabel<Position> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Diagnostic<Position> {
-	pub r#type: DiagnosticType,
+	pub type_: DiagnosticType,
 	pub labels: Vec<DiagnosticLabel<Position>>,
 }
 
 impl<Position> Diagnostic<Position> {
 	#[must_use]
 	pub fn code(&self) -> stdString {
-		format!("TAML-{}{:04}", self.r#type.group.code, self.r#type.code)
+		format!("TAML-{}{:04}", self.type_.group.code, self.type_.code)
 	}
 
 	#[must_use]
 	pub fn level(&self) -> DiagnosticLevel {
-		self.r#type.level
+		self.type_.level
 	}
 
 	#[must_use]
 	pub fn message(&self) -> &str {
-		self.r#type.title
+		self.type_.title
 	}
 }
 
