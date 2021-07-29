@@ -10,11 +10,15 @@ TODO: Date
   * `Decoded` is now `DataLiteral` and so on.
   * Renamed `Float` variants to `Decimal`
     > as these can very much be parsed as arbitrary-precision numbers, depending on the implementation.
+  * Changed number literals to reject additional leading zeroes
+    > as these could be mistaken for octal input.
+  * Added additional lexer tokens `InvalidZeroPrefixedDecimal` and `InvalidZeroPrefixedInteger`,
+    > which allow formatting and better error diagnostics involving these now-invalid tokens.
 
 * Features:
   * `smartstring::validate` is now re-exported as `validate`.
-
     > You should call this to ensure the memory layout is correct!
+  * Added diagnostics for (always invalid) zero-prefixed decimals and integers.
 
 ## 0.0.9
 

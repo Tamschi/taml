@@ -140,13 +140,17 @@ pub enum Token<'a, Position> {
 	})]
 	DataLiteral(DataLiteral<'a, Position>),
 
-	//TODO: Improve errors caused by leading `0`s.
 	#[regex(r"-?(0|[1-9]\d*)\.\d+", |lex| trim_trailing_0s(lex.slice()))]
 	Decimal(&'a str),
 
-	//TODO: Improve errors caused by leading `0`s.
+	#[regex(r"-?(0\d+)\.\d+", |lex| trim_trailing_0s(lex.slice()))]
+	InvalidZeroPrefixedDecimal(&'a str),
+
 	#[regex(r"-?(0|[1-9]\d*)", |lex| lex.slice())]
 	Integer(&'a str),
+
+	#[regex(r"-?(0\d+)", |lex| lex.slice())]
+	InvalidZeroPrefixedInteger(&'a str),
 
 	#[token(":")]
 	Colon,
@@ -160,6 +164,9 @@ pub enum Token<'a, Position> {
 	Error,
 }
 
+/// # Panics
+///
+/// This [`Display`] implementation panics when called on [`Token::Error`].
 impl<'a, Position> Display for Token<'a, Position> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmtResult {
 		match self {
@@ -184,10 +191,13 @@ impl<'a, Position> Display for Token<'a, Position> {
 				write!(f, "<{}:{}>", encoding, escape_greater(unencoded_data))
 			}
 			Token::String(str) => write!(f, r#""{}""#, escape_double_quotes(str)),
-			Token::Decimal(str) | Token::Integer(str) => write!(f, "{}", str),
+			Token::Decimal(str)
+			| Token::Integer(str)
+			| Self::InvalidZeroPrefixedDecimal(str)
+			| Token::InvalidZeroPrefixedInteger(str) => write!(f, "{}", str),
 			Token::Colon => write!(f, ":"),
 			Token::Identifier(str) => write!(f, "{}", escape_identifier(str)),
-			Token::Error => panic!(),
+			Token::Error => panic!("Tried to `Display::fmt` `taml::token::Token::Error`."),
 		}
 	}
 }

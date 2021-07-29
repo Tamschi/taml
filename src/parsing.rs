@@ -1327,6 +1327,45 @@ fn parse_value<'a, Position: Debug + Clone + PartialEq>(
 				}
 			}
 
+			// Errors
+			(lexerToken::InvalidZeroPrefixedDecimal(_), span) => {
+				reporter.report_with(|| Diagnostic {
+					type_: DiagnosticType::ZeroPrefixedDecimalFound,
+					labels: vec![
+						DiagnosticLabel::new::<&'static str, _, _>(
+							None,
+							span,
+							DiagnosticLabelPriority::Primary,
+						),
+						DiagnosticLabel::new::<&'static str, _, _>(
+							"TAML does not support optional zero prefixes on numbers, as they could be confused with octal literals.",
+							None,
+							DiagnosticLabelPriority::Auxiliary,
+						),
+					],
+				});
+				return Err(());
+			}
+
+			(lexerToken::InvalidZeroPrefixedInteger(_), span) => {
+				reporter.report_with(|| Diagnostic {
+					type_: DiagnosticType::ZeroPrefixedIntegerFound,
+					labels: vec![
+						DiagnosticLabel::new::<&'static str, _, _>(
+							None,
+							span,
+							DiagnosticLabelPriority::Primary,
+						),
+						DiagnosticLabel::new::<&'static str, _, _>(
+							"TAML does not support optional zero prefixes on numbers, as they could be confused with octal literals.",
+							None,
+							DiagnosticLabelPriority::Auxiliary,
+						),
+					],
+				});
+				return Err(());
+			}
+
 			(_, span) => return err(span, reporter),
 		})
 	} else {

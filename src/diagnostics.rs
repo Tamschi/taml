@@ -39,6 +39,20 @@ enum_properties! {
 			title: "Unrecognised token",
 		},
 
+		ZeroPrefixedDecimalFound {
+			group: DiagnosticGroup::Lexing,
+			code: 1,
+			level: DiagnosticLevel::Error,
+			title: "Zero-prefixed decimal found",
+		},
+
+		ZeroPrefixedIntegerFound {
+			group: DiagnosticGroup::Lexing,
+			code: 2,
+			level: DiagnosticLevel::Error,
+			title: "Zero-prefixed integer found",
+		},
+
 		HeadingTooDeep {
 			group: DiagnosticGroup::Parsing,
 			code: 1,
