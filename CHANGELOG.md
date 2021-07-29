@@ -2,9 +2,9 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
-## next
+## 0.0.10
 
-TODO: Date
+2021-07-29
 
 * **Breaking:**
   * `Decoded` is now `DataLiteral` and so on.
