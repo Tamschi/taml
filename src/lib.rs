@@ -1,7 +1,10 @@
 #![doc(html_root_url = "https://docs.rs/taml/0.0.9")]
 #![warn(clippy::pedantic)]
 #![allow(clippy::result_unit_err)]
-#![allow(clippy::trivially_copy_pass_by_ref)]
+#![allow(
+	clippy::semicolon_if_nothing_returned,
+	clippy::trivially_copy_pass_by_ref
+)]
 
 use cervine::Cow;
 use core::ops::Range;
