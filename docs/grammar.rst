@@ -33,7 +33,7 @@ Whitespace
 
 	.. code-block:: regex
 
-		[ \r\t]+
+		[ \t]+
 
 Whitespace is meaningless except when separating otherwise-joined tokens.
 
@@ -66,15 +66,26 @@ The only limitation to comment placement is that the line up to that point must 
 Line break
 ----------
 
+.. note::
+
+	TK: Format as regex section
+
+	.. code-block:: regex
+
+		\r?\n
+
 TAML does not use commas to delineate values, outside of `inline lists`_ and rows_.
 
 Instead, line breaks are a grammar token that separates comments_, headings_, `key-value pairs`_ and table_ rows_.
 
-.. warning::
+.. note::
 
-	"Line break" *specifically* and *exclusively* refers to Unicode code point `U+000A LINE FEED (LF) <https://graphemica.com/000A>`_.
+	"Line break" more specifically refers to Unicode code point `U+000A LINE FEED (LF) <https://graphemica.com/000A>`_,
+	which can optionally be prefixed with a single `U+000D CARRIAGE RETURN (CR) <https://graphemica.com/000D>`_.
 
-	`U+000D CARRIAGE RETURN (CR) <https://graphemica.com/000D>`_ is an illegal character everywhere in TAML unless quoted.
+	**This is the only position in which verbatim carriage return characters are legal.**
+	Note that occurrences of the line feed character in quotes are not considered to be a line break token!
+	Correct the literal in question by either replacing all verbatim carriage return characters with ``\r`` or deleting them.
 
 Empty lines outside of quotes and lines containing only a comment always can be removed without changing the structure or contents of the document.
 
@@ -186,6 +197,8 @@ Additional leading zeroes are disallowed to avoid confusion with languages and/o
 
 		some_bitfield: <bits:1000_0001 1111_0000>
 		another_encoding: <hex:81 F0>
+
+.. _decimals:
 
 Decimal
 -------

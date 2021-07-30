@@ -9,7 +9,19 @@ use smartstring::alias::String;
 use std::{
 	fmt::{Display, Formatter, Result as fmtResult},
 	iter,
+	ops::Range,
 };
+
+/// Data structure for **invalid** data literals (`<…:…>`).
+///
+/// Unlike in [`DataLiteral`], strings are not unescaped in order to preserve the `'\r'` vs `'\\r'` distinction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidDataLiteral<'a, Position> {
+	pub encoding: &'a str,
+	pub encoding_span: Range<Position>,
+	pub unencoded_data: &'a str,
+	pub unencoded_data_span: Range<Position>,
+}
 
 #[must_use = "pure function"]
 pub fn escape_greater(string: &str) -> Cow<String, str> {
@@ -93,7 +105,7 @@ pub enum Token<'a, Position> {
 	#[regex("#+", |lex| lex.slice().chars().count())]
 	HeadingHashes(usize),
 
-	#[token("\n")]
+	#[token("\r?\n")]
 	Newline,
 
 	#[token("[")]
@@ -117,8 +129,12 @@ pub enum Token<'a, Position> {
 	#[token(".")]
 	Period,
 
-	#[regex(r#""([^\\"]|\\\\|\\")*""#, |lex| unescape_backslashed_verbatim(&lex.slice()[1..lex.slice().len() - 1]))]
+	#[regex(r#""([^\\"\r]|\\\\|\\"|\\r)*""#, priority = 1000, callback = |lex| unescape_backslashed_verbatim(&lex.slice()[1..lex.slice().len() - 1]))]
 	String(Cow<'a, String, str>),
+
+	/// Unlike in [`Token::String`], the quoted string is not unescaped in order to preserve the `'\r'` vs `'\\r'` distinction.
+	#[regex(r#""([^\\"]|\\\\|\\"|\\r)*""#, |lex| &lex.slice()[1..lex.slice().len() - 1])]
+	InvalidStringLiteralWithCarriageReturn(&'a str),
 
 	#[regex(r#"<[a-zA-Z_][a-zA-Z\-_0-9]*:([^\\>]|\\\\|\\>)*>"#, |lex| {
 		let (encoding, unencoded_data) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
@@ -129,7 +145,7 @@ pub enum Token<'a, Position> {
 			unencoded_data_span: lex.span().end - 1 - unencoded_data.len()..lex.span().end - 1,
 		}
 	})]
-	#[regex(r#"<`([^\\`]|\\\\|\\`)*`:([^\\>]|\\\\|\\>)*>"#, |lex| {
+	#[regex(r#"<`([^\\`\r]|\\\\|\\`|\\r)*`:([^\\>\r]|\\\\|\\>|\\r)*>"#, priority = 1000, callback = |lex| {
 		let (encoding, unencoded_data) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
 		DataLiteral {
 			encoding: unescape_quoted_identifier(encoding),
@@ -139,6 +155,18 @@ pub enum Token<'a, Position> {
 		}
 	})]
 	DataLiteral(DataLiteral<'a, Position>),
+
+	/// Unlike in [`Token::DataLiteral`], the strings are not unescaped in order to preserve the `'\r'` vs `'\\r'` distinction.
+	#[regex(r#"<`([^\\`]|\\\\|\\`|\\r)*`:([^\\>]|\\\\|\\>|\\r)*>"#, |lex| {
+		let (encoding, unencoded_data) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
+		InvalidDataLiteral {
+			encoding,
+			encoding_span: lex.span().start + 1..lex.span().start + 1 + encoding.len(),
+			unencoded_data,
+			unencoded_data_span: lex.span().end - 1 - unencoded_data.len()..lex.span().end - 1,
+		}
+	})]
+	InvalidDataLiteralWithCarriageReturn(InvalidDataLiteral<'a, Position>),
 
 	#[regex(r"-?(0|[1-9]\d*)\.\d+", |lex| trim_trailing_0s(lex.slice()))]
 	Decimal(&'a str),
@@ -156,17 +184,24 @@ pub enum Token<'a, Position> {
 	Colon,
 
 	#[regex(r"[a-zA-Z_][a-zA-Z\-_0-9]*", |lex| Cow::Borrowed(lex.slice()))]
-	#[regex(r"`([^\\`]|\\\\|\\`)*`", |lex| unescape_quoted_identifier(lex.slice()))]
+	#[regex(r"`([^\\`\r]|\\\\|\\`|\\r)*`", priority = 1000, callback = |lex| unescape_quoted_identifier(lex.slice()))]
 	Identifier(Cow<'a, String, str>),
 
+	/// Unlike in [`Token::Identifier`], the quoted string is not unescaped in order to preserve the `'\r'` vs `'\\r'` distinction.
+	#[regex(r"`([^\\`\r]|\\\\|\\`|\\r)*`", |lex| lex.slice()[1..lex.slice().len() - 1])]
+	InvalidIdentifierWithCarriageReturn(&'a str),
+
 	#[error]
-	#[regex(r"[ \r\t]+", logos::skip)]
+	#[regex(r"[ \t]+", logos::skip)]
 	Error,
 }
 
 /// # Panics
 ///
 /// This [`Display`] implementation panics when called on [`Token::Error`].
+///
+/// It also panics when used on `Invalid…WithCarriageReturn` tokens that cannot be reparsed as such,
+/// for example by containing improper escape sequences.
 impl<'a, Position> Display for Token<'a, Position> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmtResult {
 		match self {
