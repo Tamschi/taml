@@ -117,9 +117,7 @@ pub enum Token<'a, Position> {
 	#[regex("#+", |lex| lex.slice().chars().count())]
 	HeadingHashes(usize),
 
-	// TODO: Report `"\r?\n"` not working.
-	#[token("\n")]
-	#[token("\r\n")]
+	#[regex("\r?\n")]
 	Newline,
 
 	#[token("[")]
