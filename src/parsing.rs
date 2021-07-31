@@ -1366,6 +1366,10 @@ fn parse_value<'a, Position: Debug + Clone + PartialEq>(
 				return Err(());
 			}
 
+			(lexerToken::InvalidDataLiteralWithVerbatimCarriageReturn(_), _span) => todo!(),
+			(lexerToken::InvalidIdentifierWithVerbatimCarriageReturn(_), _span) => todo!(),
+			(lexerToken::InvalidStringWithVerbatimCarriageReturn(_), _span) => todo!(),
+
 			(_, span) => return err(span, reporter),
 		})
 	} else {

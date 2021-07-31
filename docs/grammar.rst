@@ -96,8 +96,10 @@ Empty lines outside of quotes and lines containing only a comment always can be 
 	``taml fix`` can fix your line endings for you without changing the meaning of quotes. (TODO)
 	It warns about any occurrence of the character it doesn't fix by default, in either sense. (TODO)
 
-Identifiers
------------
+.. _identifiers:
+
+Identifier
+----------
 
 .. note::
 
@@ -109,7 +111,7 @@ Identifiers
 
 	.. code-block:: regex
 
-		`([^\\`]|\\\\|\\`)*`
+		`([^\\`\r]|\\\\|\\`|\\r)*`
 
 Identifiers in TAML are arbitrary Unicode strings and can appear in two forms, verbatim and quoted:
 
@@ -164,7 +166,7 @@ Value
 
 A value is any one of the following:
 
-TK
+`data literal`_, decimal_, `enum variant`_, integer_, list_, string_, struct_.
 
 .. warning::
 
@@ -236,6 +238,22 @@ Additional trailing zeroes are considered idempotent and **must not make a diffe
 
 	Absolutely do not make any distinction regarding additional trailing zeroes in decimals when writing a lexer or parser.
 
+
+String
+------
+
+.. note::
+
+	TK: Format as regex section
+
+	.. code-block:: regex
+
+		"([^\\"\r]|\\\\|\\"|\\r)*"
+
+Strings are written as quoted Unicode literals. The characters ``\``, ``"`` and `U+000D CARRIAGE RETURN (CR) <https://graphemica.com/000D>`_
+must be escaped as ``\\``, ``\"`` and ``\r``, respectively.
+
+The character `U+0000 NULL <https://graphemica.com/0000>`_ may be unsupported in environments where processing it would be unreasonably error-prone.
 
 .. _variants:
 
