@@ -1,76 +1,100 @@
 use crate::DataLiteral;
 use cervine::Cow;
 use gnaw::Unshift as _;
-use lazy_transform_str::{
-	escape_double_quotes, unescape_backslashed_verbatim, Transform as _, TransformedPart,
-};
+use lazy_transform_str::{Transform as _, TransformedPart};
 use logos::Logos;
 use smartstring::alias::String;
 use std::{
 	fmt::{Display, Formatter, Result as fmtResult},
 	iter,
+	ops::Range,
 };
+use tap::Tap;
+
+/// Data structure for **invalid** data literals (`<…:…>`).
+///
+/// Unlike in [`DataLiteral`], strings are not unescaped in order to preserve the `'\r'` vs `'\\r'` distinction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidDataLiteral<'a, Position> {
+	pub encoding: &'a str,
+	pub encoding_span: Range<Position>,
+	pub unencoded_data: &'a str,
+	pub unencoded_data_span: Range<Position>,
+}
 
 #[must_use = "pure function"]
-pub fn escape_greater(string: &str) -> Cow<String, str> {
+pub fn escape_unencoded_data(string: &str) -> Cow<String, str> {
 	string.transform(|rest| match rest.unshift().unwrap() {
 		c @ ('\\' | '>') => {
 			let mut changed = String::from(r"\");
 			changed.push(c);
 			TransformedPart::Changed(changed)
 		}
+		'\r' => TransformedPart::Changed("\\r".into()),
 		_ => TransformedPart::Unchanged,
 	})
 }
 
-fn escape_identifier(string: &str) -> Cow<String, str> {
-	let mut quote = match string.chars().next() {
-		Some(first) => first == '-' || first.is_ascii_digit(),
-		None => true,
-	};
-	let escaped_name = string.transform(|rest| match rest.unshift().unwrap() {
-		c @ ('\\' | '`') => {
-			quote = true;
-			let mut changed = String::from(r"\");
-			changed.push(c);
-			TransformedPart::Changed(changed)
-		}
-		c => {
-			if !(('a'..='z').contains(&c)
-				|| ('A'..='Z').contains(&c)
-				|| c == '-' || c == '_'
-				|| ('0'..'9').contains(&c))
-			{
-				quote = true
+macro_rules! define_escape {
+	($name:ident, delimiter = $delimiter:literal, always_quote = $always_quote:literal) => {
+		fn $name(string: &str) -> Cow<String, str> {
+			let mut quote = $always_quote
+				|| match string.chars().next() {
+					Some(first) => first == '-' || first.is_ascii_digit(),
+					None => true,
+				};
+			let escaped_name = string.transform(|rest| match rest.unshift().unwrap() {
+				c @ ('\\' | $delimiter) => {
+					quote = true;
+					let mut changed = String::from(r"\");
+					changed.push(c);
+					TransformedPart::Changed(changed)
+				}
+				'\r' => {
+					quote = true;
+					TransformedPart::Changed("\\r".into())
+				}
+				c => {
+					if !(('a'..='z').contains(&c)
+						|| ('A'..='Z').contains(&c)
+						|| c == '-' || c == '_'
+						|| ('0'..'9').contains(&c))
+					{
+						quote = true
+					}
+					TransformedPart::Unchanged
+				}
+			});
+			if quote {
+				let mut quoted = String::from(concat!($delimiter));
+				quoted.push_str(&escaped_name);
+				quoted.push($delimiter);
+				Cow::Owned(quoted)
+			} else {
+				escaped_name
 			}
-			TransformedPart::Unchanged
 		}
-	});
-	if quote {
-		let mut quoted = String::from("`");
-		quoted.push_str(&escaped_name);
-		quoted.push('`');
-		Cow::Owned(quoted)
-	} else {
-		escaped_name
-	}
+	};
 }
 
-fn unescape_quoted_identifier(string: &str) -> Cow<String, str> {
-	assert!(string.starts_with('`'));
-	assert!(string.ends_with('`'));
-	let string = &string['`'.len_utf8()..string.len() - '`'.len_utf8()];
+define_escape!(escape_string, delimiter = '"', always_quote = true);
+define_escape!(escape_identifier, delimiter = '`', always_quote = false);
+
+fn unescape_verbatim_and_r_to_carriage_return(string: &str) -> Cow<String, str> {
 	let mut escaped = false;
-	string.transform(|rest| match rest.unshift().unwrap() {
-		'\\' if !escaped => {
-			escaped = true;
-			TransformedPart::Changed(String::new())
+	string.transform(|rest| {
+		match rest.unshift().unwrap() {
+			'\\' if !escaped => {
+				escaped = true;
+				return TransformedPart::Changed(String::new());
+			}
+			'r' if escaped => TransformedPart::Changed("\r".into()),
+			_ => {
+				// This function can be really lenient only because we already filter out invalid escapes with the lexer regex.
+				TransformedPart::Unchanged
+			}
 		}
-		_ => {
-			// This function can be really lenient only because we already filter out invalid escapes with the lexer regex.
-			escaped = false;
-			TransformedPart::Unchanged
-		}
+		.tap(|_| escaped = false)
 	})
 }
 
@@ -93,7 +117,7 @@ pub enum Token<'a, Position> {
 	#[regex("#+", |lex| lex.slice().chars().count())]
 	HeadingHashes(usize),
 
-	#[token("\n")]
+	#[regex("\r?\n")]
 	Newline,
 
 	#[token("[")]
@@ -117,28 +141,44 @@ pub enum Token<'a, Position> {
 	#[token(".")]
 	Period,
 
-	#[regex(r#""([^\\"]|\\\\|\\")*""#, |lex| unescape_backslashed_verbatim(&lex.slice()[1..lex.slice().len() - 1]))]
+	#[regex(r#""([^\\"\r]|\\\\|\\"|\\r)*""#, priority = 1000, callback = |lex| unescape_verbatim_and_r_to_carriage_return(&lex.slice()[1..lex.slice().len() - 1]))]
 	String(Cow<'a, String, str>),
 
+	/// Unlike in [`Token::String`], the quoted string is not unescaped in order to preserve the `'\r'` vs `'\\r'` distinction.
+	#[regex(r#""([^\\"]|\\\\|\\"|\\r)*""#, |lex| &lex.slice()[1..lex.slice().len() - 1])]
+	InvalidStringWithVerbatimCarriageReturn(&'a str),
+
 	#[regex(r#"<[a-zA-Z_][a-zA-Z\-_0-9]*:([^\\>]|\\\\|\\>)*>"#, |lex| {
-		let (encoding, unencoded_data) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
+		let (encoding, unencoded_data) = lex.slice()['<'.len_utf8()..lex.slice().len() - '>'.len_utf8()].split_once(':').unwrap(); //FIXME: Broken if identifier contains `:`.
 		DataLiteral {
 			encoding: Cow::Borrowed(encoding),
-			encoding_span: lex.span().start + 1..lex.span().start + 1 + encoding.len(),
-			unencoded_data: unescape_backslashed_verbatim(unencoded_data),
+			encoding_span: lex.span().start + '<'.len_utf8()..lex.span().start + '<'.len_utf8() + encoding.len(),
+			unencoded_data: unescape_verbatim_and_r_to_carriage_return(unencoded_data),
 			unencoded_data_span: lex.span().end - 1 - unencoded_data.len()..lex.span().end - 1,
 		}
 	})]
-	#[regex(r#"<`([^\\`]|\\\\|\\`)*`:([^\\>]|\\\\|\\>)*>"#, |lex| {
-		let (encoding, unencoded_data) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
+	#[regex(r#"<`([^\\`\r]|\\\\|\\`|\\r)*`:([^\\>\r]|\\\\|\\>|\\r)*>"#, priority = 1000, callback = |lex| {
+		let (encoding, unencoded_data) = lex.slice()['<'.len_utf8()..lex.slice().len() - '>'.len_utf8()].split_once(':').unwrap(); //FIXME: Broken if identifier contains `:`.
 		DataLiteral {
-			encoding: unescape_quoted_identifier(encoding),
-			encoding_span: lex.span().start + 1..lex.span().start + 1 + encoding.len(),
-			unencoded_data: unescape_backslashed_verbatim(unencoded_data),
-			unencoded_data_span: lex.span().end - 1 - unencoded_data.len()..lex.span().end - 1,
+			encoding: unescape_verbatim_and_r_to_carriage_return(&encoding['`'.len_utf8()..encoding.len()-'`'.len_utf8()]),
+			encoding_span: lex.span().start + '`'.len_utf8()..lex.span().start + '`'.len_utf8() + encoding.len(),
+			unencoded_data: unescape_verbatim_and_r_to_carriage_return(unencoded_data),
+			unencoded_data_span: lex.span().end - '>'.len_utf8() - unencoded_data.len()..lex.span().end - '>'.len_utf8(),
 		}
 	})]
 	DataLiteral(DataLiteral<'a, Position>),
+
+	/// Unlike in [`Token::DataLiteral`], the strings are not unescaped in order to preserve the `'\r'` vs `'\\r'` distinction.
+	#[regex(r#"<`([^\\`]|\\\\|\\`|\\r)*`:([^\\>]|\\\\|\\>|\\r)*>"#, |lex| {
+		let (encoding, unencoded_data) = lex.slice()[1..lex.slice().len() - 1].split_once(':').unwrap();
+		InvalidDataLiteral {
+			encoding,
+			encoding_span: lex.span().start + '`'.len_utf8()..lex.span().start + '`'.len_utf8() + encoding.len(),
+			unencoded_data,
+			unencoded_data_span: lex.span().end - '>'.len_utf8() - unencoded_data.len()..lex.span().end - '>'.len_utf8(),
+		}
+	})]
+	InvalidDataLiteralWithVerbatimCarriageReturn(InvalidDataLiteral<'a, Position>),
 
 	#[regex(r"-?(0|[1-9]\d*)\.\d+", |lex| trim_trailing_0s(lex.slice()))]
 	Decimal(&'a str),
@@ -156,17 +196,24 @@ pub enum Token<'a, Position> {
 	Colon,
 
 	#[regex(r"[a-zA-Z_][a-zA-Z\-_0-9]*", |lex| Cow::Borrowed(lex.slice()))]
-	#[regex(r"`([^\\`]|\\\\|\\`)*`", |lex| unescape_quoted_identifier(lex.slice()))]
+	#[regex(r"`([^\\`\r]|\\\\|\\`|\\r)*`", priority = 1000, callback = |lex| unescape_verbatim_and_r_to_carriage_return(&lex.slice()['`'.len_utf8()..lex.slice().len() - '`'.len_utf8()]))]
 	Identifier(Cow<'a, String, str>),
 
+	/// Unlike in [`Token::Identifier`], the quoted string is not unescaped in order to preserve the `'\r'` vs `'\\r'` distinction.
+	#[regex(r"`([^\\`\r]|\\\\|\\`|\\r)*`", |lex| lex.slice()['`'.len_utf8()..lex.slice().len() - '`'.len_utf8()])]
+	InvalidIdentifierWithVerbatimCarriageReturn(&'a str),
+
 	#[error]
-	#[regex(r"[ \r\t]+", logos::skip)]
+	#[regex(r"[ \t]+", logos::skip)]
 	Error,
 }
 
 /// # Panics
 ///
 /// This [`Display`] implementation panics when called on [`Token::Error`].
+///
+/// It also panics when used on `Invalid…WithCarriageReturn` tokens that cannot be reparsed as such,
+/// for example by containing improper escape sequences.
 impl<'a, Position> Display for Token<'a, Position> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmtResult {
 		match self {
@@ -188,15 +235,28 @@ impl<'a, Position> Display for Token<'a, Position> {
 				unencoded_data,
 				..
 			}) => {
-				write!(f, "<{}:{}>", encoding, escape_greater(unencoded_data))
+				write!(
+					f,
+					"<{}:{}>",
+					escape_identifier(encoding),
+					escape_unencoded_data(unencoded_data)
+				)
 			}
-			Token::String(str) => write!(f, r#""{}""#, escape_double_quotes(str)),
+			Self::InvalidDataLiteralWithVerbatimCarriageReturn(invalid_data_literal) => write!(
+				f,
+				"<`{}`:{}>",
+				invalid_data_literal.encoding,
+				invalid_data_literal.unencoded_data // FIXME: Assert that at least the escape sequences are okay.
+			),
+			Token::String(str) => write!(f, "{}", escape_string(str)),
+			Token::InvalidStringWithVerbatimCarriageReturn(str) => write!(f, r#""{}""#, str), // FIXME: Assert that at least the escape sequences are okay.
 			Token::Decimal(str)
 			| Token::Integer(str)
 			| Self::InvalidZeroPrefixedDecimal(str)
 			| Token::InvalidZeroPrefixedInteger(str) => write!(f, "{}", str),
 			Token::Colon => write!(f, ":"),
 			Token::Identifier(str) => write!(f, "{}", escape_identifier(str)),
+			Token::InvalidIdentifierWithVerbatimCarriageReturn(str) => write!(f, "`{}`", str), // FIXME: Assert that at least the escape sequences are okay.
 			Token::Error => panic!("Tried to `Display::fmt` `taml::token::Token::Error`."),
 		}
 	}

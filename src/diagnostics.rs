@@ -53,6 +53,13 @@ enum_properties! {
 			title: "Zero-prefixed integer found",
 		},
 
+		VerbatimCarriageReturnInsideLiteral {
+			group: DiagnosticGroup::Lexing,
+			code: 3,
+			level: DiagnosticLevel::Error,
+			title: "Verbatim U+000D CARRIAGE RETURN (CR) inside literal",
+		},
+
 		HeadingTooDeep {
 			group: DiagnosticGroup::Parsing,
 			code: 1,

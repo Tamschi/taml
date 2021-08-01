@@ -1,7 +1,7 @@
 use crate::{
 	diagnostics::{Diagnostic, DiagnosticLabel, DiagnosticLabelPriority, DiagnosticType, Reporter},
 	token::Token as lexerToken,
-	DataLiteral,
+	DataLiteral, Position,
 };
 use cervine::Cow;
 use debugless_unwrap::DebuglessUnwrap as _;
@@ -11,10 +11,13 @@ use std::{
 	borrow::Borrow,
 	fmt::Debug,
 	hash::Hash,
-	iter::Peekable,
+	iter::{self, Peekable},
 	ops::{Deref, Range},
 };
 use try_match::try_match;
+
+//FIXME: This entire file really needs to be refactored to filter out error tokens early,
+// and to then type-safely match only on a subset. (Time for an enum subsetting macro?)
 
 pub trait IntoToken<'a, Position> {
 	fn into_token(self) -> Token<'a, Position>;
@@ -97,19 +100,19 @@ pub enum VariantPayload<'a, Position> {
 	Unit,
 }
 
-struct PathSegment<'a, Position: Debug + Clone + PartialEq> {
-	base: Vec<BasicPathElement<'a, Position>>,
-	tabular: Option<TabularPathSegment<'a, Position>>,
+struct PathSegment<'a, P: Position> {
+	base: Vec<BasicPathElement<'a, P>>,
+	tabular: Option<TabularPathSegment<'a, P>>,
 }
 
 #[derive(Clone)]
-struct BasicPathElement<'a, Position: Debug + Clone + PartialEq> {
-	key: BasicPathElementKey<'a, Position>,
-	variant: Option<Key<'a, Position>>,
+struct BasicPathElement<'a, P: Position> {
+	key: BasicPathElementKey<'a, P>,
+	variant: Option<Key<'a, P>>,
 }
 
-impl<'a, Position: Debug + Clone + PartialEq> BasicPathElement<'a, Position> {
-	fn span(&self) -> Range<Position> {
+impl<'a, P: Position> BasicPathElement<'a, P> {
+	fn span(&self) -> Range<P> {
 		self.variant.as_ref().map_or_else(
 			|| self.key.span().clone(),
 			|variant| self.key.span().start.clone()..variant.span.end.clone(),
@@ -135,9 +138,9 @@ impl<'a, Position> BasicPathElementKey<'a, Position> {
 	}
 }
 
-struct TabularPathSegment<'a, Position: Debug + Clone + PartialEq> {
-	base: Vec<BasicPathElement<'a, Position>>,
-	multi: Option<(Vec<TabularPathSegment<'a, Position>>, Range<Position>)>,
+struct TabularPathSegment<'a, P: Position> {
+	base: Vec<BasicPathElement<'a, P>>,
+	multi: Option<(Vec<TabularPathSegment<'a, P>>, Range<P>)>,
 }
 
 #[derive(Clone, Debug)]
@@ -184,7 +187,7 @@ pub type MapIter<'iter, 'taml, Position> =
 pub type List<'a, Position> = Vec<Taml<'a, Position>>;
 pub type ListIter<'iter, 'taml, Position> = std::slice::Iter<'iter, Taml<'taml, Position>>;
 
-impl<'a, Position: Debug + Clone + PartialEq> TabularPathSegment<'a, Position> {
+impl<'a, P: Position> TabularPathSegment<'a, P> {
 	fn arity(&self) -> usize {
 		match &self.multi {
 			None => 1,
@@ -194,9 +197,9 @@ impl<'a, Position: Debug + Clone + PartialEq> TabularPathSegment<'a, Position> {
 
 	fn assign(
 		&self,
-		selection: &mut Map<'a, Position>,
-		values: &mut impl Iterator<Item = Taml<'a, Position>>,
-		reporter: &mut impl Reporter<Position>,
+		selection: &mut Map<'a, P>,
+		values: &mut impl Iterator<Item = Taml<'a, P>>,
+		reporter: &mut impl Reporter<P>,
 	) -> Result<(), ()> {
 		#![allow(clippy::items_after_statements)]
 		#![allow(clippy::option_if_let_else)]
@@ -218,16 +221,14 @@ impl<'a, Position: Debug + Clone + PartialEq> TabularPathSegment<'a, Position> {
 			reporter,
 		)?;
 
-		fn placeholder<'a, Position: Debug + Clone + PartialEq>(
-			position: Position,
-		) -> Taml<'a, Position> {
+		fn placeholder<'a, P: Position>(position: P) -> Taml<'a, P> {
 			Taml {
 				span: position.clone()..position,
 				value: TamlValue::String(Cow::Borrowed("PLACEHOLDER")),
 			}
 		}
 
-		let selection: &mut Taml<'a, Position> = match &self.base.last().unwrap().key {
+		let selection: &mut Taml<'a, P> = match &self.base.last().unwrap().key {
 			BasicPathElementKey::Plain(key) => try_match!(
 				map::Entry::Vacant(vacant)
 				= selection.entry(key.clone())
@@ -304,10 +305,10 @@ impl<'a, Position: Debug + Clone + PartialEq> TabularPathSegment<'a, Position> {
 /// # Errors
 ///
 /// Iff the given input from `iter` is invalid.
-pub fn parse<'a, Position: Debug + Clone + PartialEq>(
-	iter: impl IntoIterator<Item = impl IntoToken<'a, Position>>,
-	reporter: &mut impl Reporter<Position>,
-) -> Result<Map<'a, Position>, ()> {
+pub fn parse<'a, P: Position>(
+	iter: impl IntoIterator<Item = impl IntoToken<'a, P>>,
+	reporter: &mut impl Reporter<P>,
+) -> Result<Map<'a, P>, ()> {
 	#![allow(clippy::items_after_statements)]
 	#![allow(clippy::too_many_lines)]
 
@@ -417,7 +418,7 @@ pub fn parse<'a, Position: Debug + Clone + PartialEq>(
 
 				if path
 					.last()
-					.and_then(|s: &PathSegment<Position>| s.tabular.as_ref())
+					.and_then(|s: &PathSegment<P>| s.tabular.as_ref())
 					.is_some()
 				{
 					reporter.report_with(|| Diagnostic {
@@ -550,10 +551,10 @@ pub fn parse<'a, Position: Debug + Clone + PartialEq>(
 	Ok(taml)
 }
 
-fn parse_path_segment<'a, 'b, 'c, Position: Debug + Clone + PartialEq>(
-	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
-	reporter: &mut impl Reporter<Position>,
-) -> Result<PathSegment<'a, Position>, ()> {
+fn parse_path_segment<'a, 'b, 'c, P: Position>(
+	iter: &mut Peekable<impl Iterator<Item = Token<'a, P>>>,
+	reporter: &mut impl Reporter<P>,
+) -> Result<PathSegment<'a, P>, ()> {
 	#![allow(clippy::too_many_lines)]
 
 	let mut base = vec![];
@@ -713,6 +714,16 @@ fn parse_path_segment<'a, 'b, 'c, Position: Debug + Clone + PartialEq>(
 							return Err(());
 						}
 					}
+
+					Some(lexerToken::InvalidIdentifierWithVerbatimCarriageReturn(str)) => {
+						let str = *str;
+						reporter.report_with(|| Diagnostic {
+							type_: DiagnosticType::VerbatimCarriageReturnInsideLiteral,
+							labels: cr_labels(str, iter.next().unwrap().span, Some('`')),
+						});
+						return Err(());
+					}
+
 					_ => {
 						reporter.report_with(|| Diagnostic {
 							type_: DiagnosticType::ExpectedPathSegment,
@@ -762,10 +773,10 @@ fn parse_path_segment<'a, 'b, 'c, Position: Debug + Clone + PartialEq>(
 	Ok(PathSegment { base, tabular })
 }
 
-fn parse_tabular_path_segments<'a, Position: Debug + Clone + PartialEq>(
-	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
-	reporter: &mut impl Reporter<Position>,
-) -> Result<Vec<TabularPathSegment<'a, Position>>, ()> {
+fn parse_tabular_path_segments<'a, P: Position>(
+	iter: &mut Peekable<impl Iterator<Item = Token<'a, P>>>,
+	reporter: &mut impl Reporter<P>,
+) -> Result<Vec<TabularPathSegment<'a, P>>, ()> {
 	let mut segments = vec![];
 	while !matches!(
 		iter.peek().map(|t| &t.token),
@@ -781,10 +792,10 @@ fn parse_tabular_path_segments<'a, Position: Debug + Clone + PartialEq>(
 	Ok(segments)
 }
 
-fn parse_tabular_path_segment<'a, Position: Debug + Clone + PartialEq>(
-	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
-	reporter: &mut impl Reporter<Position>,
-) -> Result<TabularPathSegment<'a, Position>, ()> {
+fn parse_tabular_path_segment<'a, P: Position>(
+	iter: &mut Peekable<impl Iterator<Item = Token<'a, P>>>,
+	reporter: &mut impl Reporter<P>,
+) -> Result<TabularPathSegment<'a, P>, ()> {
 	#![allow(clippy::too_many_lines)]
 
 	let mut base = vec![];
@@ -950,6 +961,16 @@ fn parse_tabular_path_segment<'a, Position: Debug + Clone + PartialEq>(
 					return Err(());
 				}
 			}
+
+			Some(lexerToken::InvalidIdentifierWithVerbatimCarriageReturn(str)) => {
+				let str = *str;
+				reporter.report_with(|| Diagnostic {
+					type_: DiagnosticType::VerbatimCarriageReturnInsideLiteral,
+					labels: cr_labels(str, iter.next().unwrap().span, Some('`')),
+				});
+				return Err(());
+			}
+
 			_ => {
 				reporter.report_with(|| Diagnostic {
 					type_: DiagnosticType::ExpectedTabularPathSegment,
@@ -970,10 +991,10 @@ fn parse_tabular_path_segment<'a, Position: Debug + Clone + PartialEq>(
 	}
 }
 
-fn get_last_mut<'a, 'b, 'c, Position: Debug + Clone + PartialEq + 'c>(
-	mut selected: &'a mut Map<'b, Position>,
-	path: impl IntoIterator<Item = &'c PathSegment<'b, Position>>,
-) -> &'a mut Map<'b, Position>
+fn get_last_mut<'a, 'b, 'c, P: Position + 'c>(
+	mut selected: &'a mut Map<'b, P>,
+	path: impl IntoIterator<Item = &'c PathSegment<'b, P>>,
+) -> &'a mut Map<'b, P>
 where
 	'b: 'c,
 {
@@ -1015,11 +1036,11 @@ where
 	selected
 }
 
-fn instantiate<'a, 'b, Position: Debug + Clone + PartialEq>(
-	mut selection: &'a mut Map<'b, Position>,
-	path: impl IntoIterator<Item = BasicPathElement<'b, Position>>,
-	reporter: &mut impl Reporter<Position>,
-) -> Result<&'a mut Map<'b, Position>, ()> {
+fn instantiate<'a, 'b, P: Position>(
+	mut selection: &'a mut Map<'b, P>,
+	path: impl IntoIterator<Item = BasicPathElement<'b, P>>,
+	reporter: &mut impl Reporter<P>,
+) -> Result<&'a mut Map<'b, P>, ()> {
 	for path_element in path {
 		selection = match &path_element.key {
 			BasicPathElementKey::Plain(key) => {
@@ -1121,10 +1142,10 @@ fn instantiate<'a, 'b, Position: Debug + Clone + PartialEq>(
 	Ok(selection)
 }
 
-fn parse_key_value_pair<'a, Position: Debug + Clone + PartialEq>(
-	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
-	reporter: &mut impl Reporter<Position>,
-) -> Result<(Key<'a, Position>, Taml<'a, Position>), ()> {
+fn parse_key_value_pair<'a, P: Position>(
+	iter: &mut Peekable<impl Iterator<Item = Token<'a, P>>>,
+	reporter: &mut impl Reporter<P>,
+) -> Result<(Key<'a, P>, Taml<'a, P>), ()> {
 	Ok(
 		if let Some(lexerToken::Identifier(_)) = iter.peek().map(|t| &t.token) {
 			let (key_name, key_span) = try_match!(
@@ -1179,11 +1200,11 @@ fn parse_key_value_pair<'a, Position: Debug + Clone + PartialEq>(
 	)
 }
 
-fn parse_values_line<'a, Position: Debug + Clone + PartialEq>(
-	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
+fn parse_values_line<'a, P: Position>(
+	iter: &mut Peekable<impl Iterator<Item = Token<'a, P>>>,
 	count: usize,
-	reporter: &mut impl Reporter<Position>,
-) -> Result<Vec<Taml<'a, Position>>, ()> {
+	reporter: &mut impl Reporter<P>,
+) -> Result<Vec<Taml<'a, P>>, ()> {
 	let mut values = vec![parse_value(iter, reporter)?];
 	for _ in 1..count {
 		if iter.peek().map(|t| &t.token) == Some(&lexerToken::Comma) {
@@ -1207,10 +1228,10 @@ fn parse_values_line<'a, Position: Debug + Clone + PartialEq>(
 	Ok(values)
 }
 
-fn parse_value<'a, Position: Debug + Clone + PartialEq>(
-	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
-	reporter: &mut impl Reporter<Position>,
-) -> Result<Taml<'a, Position>, ()> {
+fn parse_value<'a, P: Position>(
+	iter: &mut Peekable<impl Iterator<Item = Token<'a, P>>>,
+	reporter: &mut impl Reporter<P>,
+) -> Result<Taml<'a, P>, ()> {
 	#![allow(clippy::too_many_lines)]
 
 	fn err<'a, Position>(
@@ -1366,9 +1387,81 @@ fn parse_value<'a, Position: Debug + Clone + PartialEq>(
 				return Err(());
 			}
 
+			(
+				lexerToken::InvalidDataLiteralWithVerbatimCarriageReturn(invalid_data_literal),
+				_span,
+			) => {
+				if invalid_data_literal.encoding.contains('\r') {
+					reporter.report_with(|| Diagnostic {
+						type_: DiagnosticType::VerbatimCarriageReturnInsideLiteral,
+						labels: cr_labels(
+							invalid_data_literal.encoding,
+							invalid_data_literal.encoding_span.clone(),
+							Some('`'),
+						),
+					});
+				}
+				if invalid_data_literal.unencoded_data.contains('\r') {
+					reporter.report_with(|| Diagnostic {
+						type_: DiagnosticType::VerbatimCarriageReturnInsideLiteral,
+						labels: cr_labels(
+							invalid_data_literal.unencoded_data,
+							invalid_data_literal.unencoded_data_span,
+							None,
+						),
+					});
+				}
+				return Err(());
+			}
+
+			(lexerToken::InvalidIdentifierWithVerbatimCarriageReturn(str), span) => {
+				reporter.report_with(|| Diagnostic {
+					type_: DiagnosticType::VerbatimCarriageReturnInsideLiteral,
+					labels: cr_labels(str, span, Some('`')),
+				});
+				return Err(());
+			}
+
+			(lexerToken::InvalidStringWithVerbatimCarriageReturn(str), span) => {
+				reporter.report_with(|| Diagnostic {
+					type_: DiagnosticType::VerbatimCarriageReturnInsideLiteral,
+					labels: cr_labels(str, span, Some('"')),
+				});
+				return Err(());
+			}
+
 			(_, span) => return err(span, reporter),
 		})
 	} else {
 		err(None, reporter)
 	}
+}
+
+fn cr_labels<P: Position>(
+	str: &str,
+	span: Range<P>,
+	delimiter: Option<char>,
+) -> Vec<DiagnosticLabel<P>> {
+	let delimiter_len = delimiter.map_or(0, char::len_utf8);
+	str.char_indices()
+		.filter_map(|(i, c)| (c == '\r').then(|| i))
+		.map(|i| DiagnosticLabel {
+			caption: None,
+			span: span
+				.start
+				.offset_range(delimiter_len + i..delimiter_len + i + '\r'.len_utf8()),
+			priority: DiagnosticLabelPriority::Primary,
+		})
+		.chain(iter::once(DiagnosticLabel::new(
+			"Hint: Either delete these code points or escape them as `\\r`.",
+			None,
+			DiagnosticLabelPriority::Auxiliary,
+		)))
+		// TODO
+		// .chain(iter::once(DiagnosticLabel::new(
+		// 	"Hint: `taml fix --erase-cr <file>` or `taml fix --escape-cr  <file>` will do this for you.",
+		// 	None,
+		// 	DiagnosticLabelPriority::Auxiliary,
+		// )))
+		.collect()
 }

@@ -6,7 +6,7 @@
 
 ![Rust 1.53](https://img.shields.io/static/v1?logo=Rust&label=&message=1.53&color=grey)
 [![CI](https://github.com/Tamschi/taml/workflows/CI/badge.svg?branch=unstable)](https://github.com/Tamschi/taml/actions?query=workflow%3ACI+branch%3Aunstable)
-![Crates.io - License](https://img.shields.io/crates/l/taml/0.0.10)
+![Crates.io - License](https://img.shields.io/crates/l/taml/0.0.11)
 
 [![GitHub](https://img.shields.io/static/v1?logo=GitHub&label=&message=%20&color=grey)](https://github.com/Tamschi/taml)
 [![open issues](https://img.shields.io/github/issues-raw/Tamschi/taml)](https://github.com/Tamschi/taml/issues)
@@ -71,6 +71,7 @@ dual licensed as above, without any additional terms or conditions.
 
 `taml` strictly follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) with the following exceptions:
 
+- **Invalid TAML becoming valid is considered a feature addition.**
 - The minor version will not reset to 0 on major version changes (except for v1).  
 Consider it the global feature level.
 - The patch version will not reset to 0 on major or minor version changes (except for v0.1 and v1).  

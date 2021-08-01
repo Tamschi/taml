@@ -2,6 +2,18 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
+## 0.0.11
+
+2021-08-01
+
+* **Breaking:**
+  * Added new `Position` trait that is required by certain functions now.
+  * Quoted literals (data literals, strings, identifiers) now cannot contain [U+000D CARRIAGE RETURN (CR)](https://graphemica.com/000D)
+    unless escaped as `\r`.
+
+* Features:
+  * The `Token::Newline` regex is now `\r?\n` (was `\n`).
+
 ## 0.0.10
 
 2021-07-29

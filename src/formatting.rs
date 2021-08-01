@@ -101,7 +101,9 @@ impl CanonicalFormatScanner {
 			| Token::Integer(_)
 			| Token::InvalidZeroPrefixedDecimal(_)
 			| Token::InvalidZeroPrefixedInteger(_) => State::Number,
-			Token::Identifier(_) => State::Identifier,
+			Token::Identifier(_) | Token::InvalidIdentifierWithVerbatimCarriageReturn(_) => {
+				State::Identifier
+			}
 			Token::Colon | Token::Comma => State::ColonOrComma,
 			Token::Error => State::Error,
 
@@ -115,7 +117,9 @@ impl CanonicalFormatScanner {
 			| Token::Thesis
 			| Token::Period
 			| Token::String(_)
-			| Token::DataLiteral(_) => State::Other,
+			| Token::InvalidStringWithVerbatimCarriageReturn(_)
+			| Token::DataLiteral(_)
+			| Token::InvalidDataLiteralWithVerbatimCarriageReturn(_) => State::Other,
 		};
 
 		recommendation
