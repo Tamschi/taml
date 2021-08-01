@@ -1,7 +1,7 @@
 use crate::{
 	diagnostics::{Diagnostic, DiagnosticLabel, DiagnosticLabelPriority, DiagnosticType, Reporter},
 	token::Token as lexerToken,
-	DataLiteral,
+	DataLiteral, PositionImpl,
 };
 use cervine::Cow;
 use debugless_unwrap::DebuglessUnwrap as _;
@@ -11,10 +11,13 @@ use std::{
 	borrow::Borrow,
 	fmt::Debug,
 	hash::Hash,
-	iter::Peekable,
+	iter::{self, Peekable},
 	ops::{Deref, Range},
 };
 use try_match::try_match;
+
+//FIXME: This entire file really needs to be refactored to filter out error tokens early,
+// and to then type-safely match only on a subset. (Time for an enum subsetting macro?)
 
 pub trait IntoToken<'a, Position> {
 	fn into_token(self) -> Token<'a, Position>;
@@ -97,18 +100,18 @@ pub enum VariantPayload<'a, Position> {
 	Unit,
 }
 
-struct PathSegment<'a, Position: Debug + Clone + PartialEq> {
+struct PathSegment<'a, Position: PositionImpl> {
 	base: Vec<BasicPathElement<'a, Position>>,
 	tabular: Option<TabularPathSegment<'a, Position>>,
 }
 
 #[derive(Clone)]
-struct BasicPathElement<'a, Position: Debug + Clone + PartialEq> {
+struct BasicPathElement<'a, Position: PositionImpl> {
 	key: BasicPathElementKey<'a, Position>,
 	variant: Option<Key<'a, Position>>,
 }
 
-impl<'a, Position: Debug + Clone + PartialEq> BasicPathElement<'a, Position> {
+impl<'a, Position: PositionImpl> BasicPathElement<'a, Position> {
 	fn span(&self) -> Range<Position> {
 		self.variant.as_ref().map_or_else(
 			|| self.key.span().clone(),
@@ -135,7 +138,7 @@ impl<'a, Position> BasicPathElementKey<'a, Position> {
 	}
 }
 
-struct TabularPathSegment<'a, Position: Debug + Clone + PartialEq> {
+struct TabularPathSegment<'a, Position: PositionImpl> {
 	base: Vec<BasicPathElement<'a, Position>>,
 	multi: Option<(Vec<TabularPathSegment<'a, Position>>, Range<Position>)>,
 }
@@ -184,7 +187,7 @@ pub type MapIter<'iter, 'taml, Position> =
 pub type List<'a, Position> = Vec<Taml<'a, Position>>;
 pub type ListIter<'iter, 'taml, Position> = std::slice::Iter<'iter, Taml<'taml, Position>>;
 
-impl<'a, Position: Debug + Clone + PartialEq> TabularPathSegment<'a, Position> {
+impl<'a, Position: PositionImpl> TabularPathSegment<'a, Position> {
 	fn arity(&self) -> usize {
 		match &self.multi {
 			None => 1,
@@ -218,9 +221,7 @@ impl<'a, Position: Debug + Clone + PartialEq> TabularPathSegment<'a, Position> {
 			reporter,
 		)?;
 
-		fn placeholder<'a, Position: Debug + Clone + PartialEq>(
-			position: Position,
-		) -> Taml<'a, Position> {
+		fn placeholder<'a, Position: PositionImpl>(position: Position) -> Taml<'a, Position> {
 			Taml {
 				span: position.clone()..position,
 				value: TamlValue::String(Cow::Borrowed("PLACEHOLDER")),
@@ -304,7 +305,7 @@ impl<'a, Position: Debug + Clone + PartialEq> TabularPathSegment<'a, Position> {
 /// # Errors
 ///
 /// Iff the given input from `iter` is invalid.
-pub fn parse<'a, Position: Debug + Clone + PartialEq>(
+pub fn parse<'a, Position: PositionImpl>(
 	iter: impl IntoIterator<Item = impl IntoToken<'a, Position>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<Map<'a, Position>, ()> {
@@ -550,7 +551,7 @@ pub fn parse<'a, Position: Debug + Clone + PartialEq>(
 	Ok(taml)
 }
 
-fn parse_path_segment<'a, 'b, 'c, Position: Debug + Clone + PartialEq>(
+fn parse_path_segment<'a, 'b, 'c, Position: PositionImpl>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<PathSegment<'a, Position>, ()> {
@@ -713,6 +714,16 @@ fn parse_path_segment<'a, 'b, 'c, Position: Debug + Clone + PartialEq>(
 							return Err(());
 						}
 					}
+
+					Some(lexerToken::InvalidIdentifierWithVerbatimCarriageReturn(str)) => {
+						let str = *str;
+						reporter.report_with(|| Diagnostic {
+							type_: DiagnosticType::VerbatimCarriageReturnInsideLiteral,
+							labels: cr_labels(str, iter.next().unwrap().span, Some('`')),
+						});
+						return Err(());
+					}
+
 					_ => {
 						reporter.report_with(|| Diagnostic {
 							type_: DiagnosticType::ExpectedPathSegment,
@@ -762,7 +773,7 @@ fn parse_path_segment<'a, 'b, 'c, Position: Debug + Clone + PartialEq>(
 	Ok(PathSegment { base, tabular })
 }
 
-fn parse_tabular_path_segments<'a, Position: Debug + Clone + PartialEq>(
+fn parse_tabular_path_segments<'a, Position: PositionImpl>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<Vec<TabularPathSegment<'a, Position>>, ()> {
@@ -781,7 +792,7 @@ fn parse_tabular_path_segments<'a, Position: Debug + Clone + PartialEq>(
 	Ok(segments)
 }
 
-fn parse_tabular_path_segment<'a, Position: Debug + Clone + PartialEq>(
+fn parse_tabular_path_segment<'a, Position: PositionImpl>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<TabularPathSegment<'a, Position>, ()> {
@@ -950,6 +961,16 @@ fn parse_tabular_path_segment<'a, Position: Debug + Clone + PartialEq>(
 					return Err(());
 				}
 			}
+
+			Some(lexerToken::InvalidIdentifierWithVerbatimCarriageReturn(str)) => {
+				let str = *str;
+				reporter.report_with(|| Diagnostic {
+					type_: DiagnosticType::VerbatimCarriageReturnInsideLiteral,
+					labels: cr_labels(str, iter.next().unwrap().span, Some('`')),
+				});
+				return Err(());
+			}
+
 			_ => {
 				reporter.report_with(|| Diagnostic {
 					type_: DiagnosticType::ExpectedTabularPathSegment,
@@ -970,7 +991,7 @@ fn parse_tabular_path_segment<'a, Position: Debug + Clone + PartialEq>(
 	}
 }
 
-fn get_last_mut<'a, 'b, 'c, Position: Debug + Clone + PartialEq + 'c>(
+fn get_last_mut<'a, 'b, 'c, Position: PositionImpl + 'c>(
 	mut selected: &'a mut Map<'b, Position>,
 	path: impl IntoIterator<Item = &'c PathSegment<'b, Position>>,
 ) -> &'a mut Map<'b, Position>
@@ -1015,7 +1036,7 @@ where
 	selected
 }
 
-fn instantiate<'a, 'b, Position: Debug + Clone + PartialEq>(
+fn instantiate<'a, 'b, Position: PositionImpl>(
 	mut selection: &'a mut Map<'b, Position>,
 	path: impl IntoIterator<Item = BasicPathElement<'b, Position>>,
 	reporter: &mut impl Reporter<Position>,
@@ -1121,7 +1142,7 @@ fn instantiate<'a, 'b, Position: Debug + Clone + PartialEq>(
 	Ok(selection)
 }
 
-fn parse_key_value_pair<'a, Position: Debug + Clone + PartialEq>(
+fn parse_key_value_pair<'a, Position: PositionImpl>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<(Key<'a, Position>, Taml<'a, Position>), ()> {
@@ -1179,7 +1200,7 @@ fn parse_key_value_pair<'a, Position: Debug + Clone + PartialEq>(
 	)
 }
 
-fn parse_values_line<'a, Position: Debug + Clone + PartialEq>(
+fn parse_values_line<'a, Position: PositionImpl>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	count: usize,
 	reporter: &mut impl Reporter<Position>,
@@ -1207,7 +1228,7 @@ fn parse_values_line<'a, Position: Debug + Clone + PartialEq>(
 	Ok(values)
 }
 
-fn parse_value<'a, Position: Debug + Clone + PartialEq>(
+fn parse_value<'a, Position: PositionImpl>(
 	iter: &mut Peekable<impl Iterator<Item = Token<'a, Position>>>,
 	reporter: &mut impl Reporter<Position>,
 ) -> Result<Taml<'a, Position>, ()> {
@@ -1366,13 +1387,81 @@ fn parse_value<'a, Position: Debug + Clone + PartialEq>(
 				return Err(());
 			}
 
-			(lexerToken::InvalidDataLiteralWithVerbatimCarriageReturn(_), _span) => todo!(),
-			(lexerToken::InvalidIdentifierWithVerbatimCarriageReturn(_), _span) => todo!(),
-			(lexerToken::InvalidStringWithVerbatimCarriageReturn(_), _span) => todo!(),
+			(
+				lexerToken::InvalidDataLiteralWithVerbatimCarriageReturn(invalid_data_literal),
+				_span,
+			) => {
+				if invalid_data_literal.encoding.contains('\r') {
+					reporter.report_with(|| Diagnostic {
+						type_: DiagnosticType::VerbatimCarriageReturnInsideLiteral,
+						labels: cr_labels(
+							invalid_data_literal.encoding,
+							invalid_data_literal.encoding_span.clone(),
+							Some('`'),
+						),
+					});
+				}
+				if invalid_data_literal.unencoded_data.contains('\r') {
+					reporter.report_with(|| Diagnostic {
+						type_: DiagnosticType::VerbatimCarriageReturnInsideLiteral,
+						labels: cr_labels(
+							invalid_data_literal.unencoded_data,
+							invalid_data_literal.unencoded_data_span,
+							None,
+						),
+					});
+				}
+				return Err(());
+			}
+
+			(lexerToken::InvalidIdentifierWithVerbatimCarriageReturn(str), span) => {
+				reporter.report_with(|| Diagnostic {
+					type_: DiagnosticType::VerbatimCarriageReturnInsideLiteral,
+					labels: cr_labels(str, span, Some('`')),
+				});
+				return Err(());
+			}
+
+			(lexerToken::InvalidStringWithVerbatimCarriageReturn(str), span) => {
+				reporter.report_with(|| Diagnostic {
+					type_: DiagnosticType::VerbatimCarriageReturnInsideLiteral,
+					labels: cr_labels(str, span, Some('"')),
+				});
+				return Err(());
+			}
 
 			(_, span) => return err(span, reporter),
 		})
 	} else {
 		err(None, reporter)
 	}
+}
+
+fn cr_labels<Position: PositionImpl>(
+	str: &str,
+	span: Range<Position>,
+	delimiter: Option<char>,
+) -> Vec<DiagnosticLabel<Position>> {
+	let delimiter_len = delimiter.map_or(0, char::len_utf8);
+	str.char_indices()
+		.filter_map(|(i, c)| (c == '\r').then(|| i))
+		.map(|i| DiagnosticLabel {
+			caption: None,
+			span: span
+				.start
+				.offset_range(delimiter_len + i..delimiter_len + i + '\r'.len_utf8()),
+			priority: DiagnosticLabelPriority::Primary,
+		})
+		.chain(iter::once(DiagnosticLabel::new(
+			"Hint: Either delete these code points or escape them as `\\r`.",
+			None,
+			DiagnosticLabelPriority::Auxiliary,
+		)))
+		// TODO
+		// .chain(iter::once(DiagnosticLabel::new(
+		// 	"Hint: `taml fix --erase-cr <file>` or `taml fix --escape-cr  <file>` will do this for you.",
+		// 	None,
+		// 	DiagnosticLabelPriority::Auxiliary,
+		// )))
+		.collect()
 }

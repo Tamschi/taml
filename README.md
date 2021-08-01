@@ -71,6 +71,7 @@ dual licensed as above, without any additional terms or conditions.
 
 `taml` strictly follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) with the following exceptions:
 
+- **Invalid TAML becoming valid is considered a feature addition.**
 - The minor version will not reset to 0 on major version changes (except for v1).  
 Consider it the global feature level.
 - The patch version will not reset to 0 on major or minor version changes (except for v0.1 and v1).  
