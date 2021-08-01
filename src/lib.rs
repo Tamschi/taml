@@ -33,19 +33,19 @@ pub struct DataLiteral<'a, Position> {
 }
 
 /// Implemented by types usable as `Position` generic type parameter in this library.
-pub trait PositionImpl: Debug + Clone + Default + PartialEq {
+pub trait Position: Debug + Clone + Default + PartialEq {
 	/// Adds `self` to both limits of `local_range` and returns the result in [`Some`].  
 	/// If this operation does not make sense, [`None`] is returned instead.
 	fn offset_range(&self, local_range: Range<usize>) -> Option<Range<Self>>;
 }
 
-impl PositionImpl for usize {
+impl Position for usize {
 	fn offset_range(&self, local_range: Range<usize>) -> Option<Range<Self>> {
 		Some(self + local_range.start..self + local_range.end)
 	}
 }
 
-impl PositionImpl for () {
+impl Position for () {
 	fn offset_range(&self, _local_range: Range<usize>) -> Option<Range<Self>> {
 		None
 	}
