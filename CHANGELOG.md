@@ -2,9 +2,9 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
-## next
+## 0.0.11
 
-TODO: Date
+2021-08-01
 
 * **Breaking:**
   * Added new `Position` trait that is required by certain functions now.
