@@ -11,6 +11,8 @@
 [![GitHub](https://img.shields.io/static/v1?logo=GitHub&label=&message=%20&color=grey)](https://github.com/Tamschi/taml)
 [![open issues](https://img.shields.io/github/issues-raw/Tamschi/taml)](https://github.com/Tamschi/taml/issues)
 [![open pull requests](https://img.shields.io/github/issues-pr-raw/Tamschi/taml)](https://github.com/Tamschi/taml/pulls)
+[![good first issues](https://img.shields.io/github/issues-raw/Tamschi/taml/good%20first%20issue?label=good+first+issues)](https://github.com/Tamschi/taml/contribute)
+
 [![crev reviews](https://web.crev.dev/rust-reviews/badge/crev_count/taml.svg)](https://web.crev.dev/rust-reviews/crate/taml/)
 
 TAML is a configuration file format combining some aspects of Markdown, CSV, TOML, YAML and Rust.
@@ -62,6 +64,8 @@ at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
+
+See [CONTRIBUTING](CONTRIBUTING.md) for more information.
 
 ## [Code of Conduct](CODE_OF_CONDUCT.md)
 
