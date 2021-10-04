@@ -42,7 +42,7 @@ try_match = "^0.2.2"
 
 # Minimum version working with try_match starting with Rust 1.47.0.
 # SEE: https://github.com/rust-lang/rust/issues/77789, https://github.com/dtolnay/syn/issues/906, https://github.com/dtolnay/syn/releases/tag/1.0.44
-syn = { version = "^1.0.77", default-features = false }
+syn = { version = "^1.0.78", default-features = false }
 tap = "1.0.1"
 
 [dev-dependencies]
