@@ -32,22 +32,22 @@ maintenance = { status = "experimental" }
 [dependencies]
 cervine = "0.0.6" # public
 debugless-unwrap = "0.0.4"
-enum_properties = "^0.3.0"
+enum_properties = "0.3.0"
 gnaw = "0.0.2"
-indexmap = "^1.6.2" # public #TODO: Preserving the order should be an optional feature.
+indexmap = "1.6.2" # public #TODO: Preserving the order should be an optional feature.
 lazy-transform-str = "0.0.6"
-logos = "^0.12.0" # public (through trait implementation on Token. Is there a way to not publish this?)
-smartstring = "^0.2.9" # public
-try_match = "^0.2.2"
+logos = "0.12.0" # public (through trait implementation on Token. Is there a way to not publish this?)
+smartstring = "0.2.9" # public
+try_match = "0.2.2"
 
 # Minimum version working with try_match starting with Rust 1.47.0.
 # SEE: https://github.com/rust-lang/rust/issues/77789, https://github.com/dtolnay/syn/issues/906, https://github.com/dtolnay/syn/releases/tag/1.0.44
-syn = { version = "^1.0.78", default-features = false }
+syn = { version = "1.0.78", default-features = false }
 tap = "1.0.1"
 
 [dev-dependencies]
-cargo-husky = "^1.5.0"
-doc-comment = "^0.3.3"
+cargo-husky = "1.5.0"
+doc-comment = "0.3.3"
 git_info = "^0.1.2"
 version-sync = "^0.9.3"
 wasm-bindgen-test = "^0.3.28"
