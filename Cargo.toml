@@ -38,7 +38,7 @@ indexmap = "1.6.2" # public #TODO: Preserving the order should be an optional fe
 lazy-transform-str = "0.0.6"
 logos = "0.12.0" # public (through trait implementation on Token. Is there a way to not publish this?)
 smartstring = "0.2.9" # public
-try_match = "0.2.2"
+try_match = "0.3.0"
 
 # Minimum version working with try_match starting with Rust 1.47.0.
 # SEE: https://github.com/rust-lang/rust/issues/77789, https://github.com/dtolnay/syn/issues/906, https://github.com/dtolnay/syn/releases/tag/1.0.44
