@@ -4,7 +4,7 @@
 [![Crates.io](https://img.shields.io/crates/v/taml)](https://crates.io/crates/taml)
 [![Docs.rs](https://docs.rs/taml/badge.svg)](https://docs.rs/taml)
 
-![Rust 1.53](https://img.shields.io/static/v1?logo=Rust&label=&message=1.53&color=grey)
+![Rust 1.54](https://img.shields.io/static/v1?logo=Rust&label=&message=1.54&color=grey)
 [![CI](https://github.com/Tamschi/taml/workflows/CI/badge.svg?branch=develop)](https://github.com/Tamschi/taml/actions?query=workflow%3ACI+branch%3Adevelop)
 ![Crates.io - License](https://img.shields.io/crates/l/taml/0.0.11)
 
@@ -14,6 +14,7 @@
 [![good first issues](https://img.shields.io/github/issues-raw/Tamschi/taml/good%20first%20issue?label=good+first+issues)](https://github.com/Tamschi/taml/contribute)
 
 [![crev reviews](https://web.crev.dev/rust-reviews/badge/crev_count/taml.svg)](https://web.crev.dev/rust-reviews/crate/taml/)
+[![Zulip Chat](https://img.shields.io/endpoint?label=chat&url=https%3A%2F%2Fiteration-square-automation.schichler.dev%2F.netlify%2Ffunctions%2Fstream_subscribers_shield%3Fstream%3Dproject%252Ftaml)](https://iteration-square.schichler.dev/#narrow/stream/project.2Ftaml)
 
 TAML is a configuration file format combining some aspects of Markdown, CSV, TOML, YAML and Rust.
 
@@ -85,3 +86,6 @@ This includes the Rust version requirement specified above.
 Earlier Rust versions may be compatible, but this can change with minor or patch releases.
 
 Which versions are affected by features and patches can be determined from the respective headings in [CHANGELOG.md](CHANGELOG.md).
+
+Note that dependencies of this crate may have a more lenient MSRV policy!
+Please use `cargo +nightly update -Z minimal-versions` in your automation if you don't generate Cargo.lock manually (or as necessary) and require support for a compiler older than current stable.

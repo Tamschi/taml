@@ -1,9 +1,13 @@
+//! TAML is a configuration file format combining some aspects of Markdown, CSV, TOML, YAML and Rust.
+//!
+//! [![Zulip Chat](https://img.shields.io/endpoint?label=chat&url=https%3A%2F%2Fiteration-square-automation.schichler.dev%2F.netlify%2Ffunctions%2Fstream_subscribers_shield%3Fstream%3Dproject%252Ftaml)](https://iteration-square.schichler.dev/#narrow/stream/project.2Ftaml)
+
 #![doc(html_root_url = "https://docs.rs/taml/0.0.11")]
-#![warn(clippy::pedantic)]
-#![allow(clippy::result_unit_err)]
+#![warn(clippy::pedantic, missing_docs)]
 #![allow(
 	clippy::semicolon_if_nothing_returned,
-	clippy::trivially_copy_pass_by_ref
+	clippy::trivially_copy_pass_by_ref,
+	clippy::result_unit_err,
 )]
 
 use cervine::Cow;
@@ -11,9 +15,8 @@ use core::{fmt::Debug, ops::Range};
 use smartstring::alias::String;
 
 #[cfg(doctest)]
-pub mod readme {
-	doc_comment::doctest!("../README.md");
-}
+#[doc = include_str!("../README.md")]
+mod readme {}
 
 pub mod diagnostics;
 pub mod formatting;

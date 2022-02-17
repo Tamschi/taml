@@ -2,4 +2,4 @@
 
 pub const BRANCH: &str = "develop";
 pub const USER: &str = "Tamschi";
-pub const RUST_VERSION: &str = "1.53";
+pub const RUST_VERSION: &str = "1.54";
