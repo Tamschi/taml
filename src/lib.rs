@@ -10,6 +10,9 @@
 	clippy::result_unit_err,
 )]
 
+// FIXME
+#![allow(missing_docs)]
+
 use cervine::Cow;
 use core::{fmt::Debug, ops::Range};
 use smartstring::alias::String;
