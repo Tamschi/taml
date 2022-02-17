@@ -1,18 +1,17 @@
-name: Push Audit
+name: Weekly Audit
 
 permissions:
   contents: read
   issues: write
-  pull-requests: write # Probably.
 
 on:
-  push:
-    paths:
-      - '**/Cargo.toml'
-      - '**/Cargo.lock'
+  schedule:
+    #FIXME: Schedule this daily but make it so that the job doesn't fail no matter what.
+    # (New advisories still get reported as issues, anyway.)
+    - cron: '* 23 * * 5'
 
 jobs:
-  security_audit:
+  audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2.4.0
