@@ -7,9 +7,8 @@
 #![allow(
 	clippy::semicolon_if_nothing_returned,
 	clippy::trivially_copy_pass_by_ref,
-	clippy::result_unit_err,
+	clippy::result_unit_err
 )]
-
 // FIXME
 #![allow(missing_docs)]
 
