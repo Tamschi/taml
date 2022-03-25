@@ -38,7 +38,7 @@ gnaw = "0.0.2"
 indexmap = "1.6.2" # public #TODO: Preserving the order should be an optional feature.
 lazy-transform-str = "0.0.6"
 logos = "0.12.0" # public (through trait implementation on Token. Is there a way to not publish this?)
-smartstring = "0.2.9" # public
+smartstring = "1.0.1" # public
 try_match = "0.2.2"
 
 # Minimum version working with try_match starting with Rust 1.47.0.
